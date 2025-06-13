@@ -1,0 +1,16 @@
+.ext-icon {
+    position: fixed; 
+    bottom: 0; left: 0;
+    margin: 12px;
+    width: 24px; height: 24px;
+    background: black;
+    z-index: 999999;
+    display: flex; align-items: center; justify-content: center;
+    color: white;
+    font-size: 0.85em;
+    transition: opacity 0.3s; 
+    opacity: 0; pointer-events: none;
+}
+.ext-icon.ext-shown {
+    opacity: 1; pointer-events: auto;
+}

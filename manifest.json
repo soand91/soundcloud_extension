@@ -1,0 +1,32 @@
+{
+    "manifest_version": 3,
+    "name": "version 0",
+    "version": "0.1",
+    "description": "test one",
+    "background": {
+        "scripts": [
+            "background.js"
+        ],
+        "service_worker": "background.js"
+    },
+    "content_scripts": [{
+        "matches": ["<all_urls>"],
+        "exclude_matches": ["*://soundcloud.com/*", "*://open.spotify.com/*"],
+        "js": ["purify.min.js", "content/content.js"],
+        "css": ["content/content.css"],
+        "run_at": "document_start"
+    }],
+    "action": {
+        "default_popup": "popup/popup.html"
+    },
+    "permissions": [
+        "tabs", "activeTab", "scripting"
+    ],
+    "host_permissions": [
+        "<all_urls>", "*://soundcloud.com/*"
+    ],
+    "web_accessible_resources": [{
+        "resources": ["controls/controls.html", "controls/controls.css"],
+        "matches": ["<all_urls>"]
+    }]
+}
