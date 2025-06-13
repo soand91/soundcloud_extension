@@ -82,4 +82,19 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
             });
         }   
     }
+    // messages regarding the playback state update
+    if (message.type === "playback-state-update") {
+        playbackState = message.state;
+        // Communicate new state to all non-SoundCloud tabs
+        browser.tabs.query({ url: ["<all_urls>"] }, (tabs) => {
+            tabs.forEach(tab => {
+                if (!/soundcloud\.com/.test(tab.url)) {
+                    browser.tabs.sendMessage(tab.id, {
+                        type: "update-ui-state",
+                        state: playbackState
+                    });
+                }
+            });
+        });
+    }
 });
