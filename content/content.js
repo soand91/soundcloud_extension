@@ -40,17 +40,41 @@ function addToolbarWhenReady() {
                         
                         //---- Press Play/Pause Button Toggle Logic ----
                         const playPauseBtn = controls.querySelector('.play_pause');
+                        // Asks background for current state when created
+                        browser.runtime.sendMessage({ type: "get-ui-state" }, (response) => {
+                            if (response && response.state) {
+                                updatePlayPauseIcon(response.state);
+                            }
+                        });
+                        // Sends the play/pause message to the SoundCloud tab
                         playPauseBtn.addEventListener('click', () => {
-                            // Toggle the state class on the button itself
-                            if (playPauseBtn.classList.contains('paused')) {
+                            browser.runtime.sendMessage({ type: "playpause" })
+                        });
+                        // Listen for UI updates from background
+                        browser.runtime.onMessage.addListener((message, sender, sendReseponse) => {
+                            if (message.type === "update-ui-state") {
+                                updatePlayPauseIcon(message.state);
+                            }
+                        });
+                        // Update the UI based on received response
+                        function updatePlayPauseIcon(state) {
+                            if (state === "playing") {
                                 playPauseBtn.classList.remove('paused');
                                 playPauseBtn.classList.add('playing');
-                                // TODO: trigger play logic here!
                             } else {
-                                playPauseBtn.classList.remove('playing');
                                 playPauseBtn.classList.add('paused');
-                                // TODO: trigger pause logic here!
+                                playPauseBtn.classList.remove('playing');
                             }
+                        }
+
+                        //--- Skip Prev/Next Button Logic ----
+                        const skipPrevBtn = controls.querySelector('.skip_prev');
+                        const skipNextBtn = controls.querySelector('.skip_next');
+                        skipPrevBtn.addEventListener('click', () => {
+                            browser.runtime.sendMessage({ type: "skip_prev" })
+                        });
+                        skipNextBtn.addEventListener('click', () => {
+                            browser.runtime.sendMessage({ type: "skip_next" })
                         });
 
                         //---- Shuffle Button Cycling Logic ---- 

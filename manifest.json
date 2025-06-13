@@ -9,13 +9,20 @@
         ],
         "service_worker": "background.js"
     },
-    "content_scripts": [{
-        "matches": ["<all_urls>"],
-        "exclude_matches": ["*://soundcloud.com/*", "*://open.spotify.com/*"],
-        "js": ["purify.min.js", "content/content.js"],
-        "css": ["content/content.css"],
-        "run_at": "document_start"
-    }],
+    "content_scripts": [
+        {
+            "matches": ["<all_urls>"],
+            "exclude_matches": ["*://soundcloud.com/*", "*://open.spotify.com/*"],
+            "js": ["purify.min.js", "content/content.js"],
+            "css": ["content/content.css"],
+            "run_at": "document_start"
+        },
+        {
+            "matches": ["*://soundcloud.com/*"],
+            "js": ["content/soundcloud-controls.js"],
+            "run_at": "document_idle"
+        }
+    ],
     "action": {
         "default_popup": "popup/popup.html"
     },
@@ -26,7 +33,7 @@
         "<all_urls>", "*://soundcloud.com/*"
     ],
     "web_accessible_resources": [{
-        "resources": ["controls/controls.html", "controls/controls.css"],
+        "resources": ["controls/controls.html", "controls/controls.css", "content/soundcloud-controls.js"],
         "matches": ["<all_urls>"]
     }]
 }
