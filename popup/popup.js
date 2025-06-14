@@ -1,16 +1,18 @@
 // Query for all open SoundCloud tabs
-browser.tabs.query({ url: "*://soundcloud.com/*" }, (tabs) => {
-    const tabList = document.getElementById('tab-list');
-    tabList.innerHTML = '';
-    tabs.forEach(tab => {
+browser.runtime.sendMessage({ type: "get-soundcloud-tabs" }, response => {
+    const tabListElem = document.getElementById('tab-list');
+    tabListElem.innerHTML = '';
+    response.tabs.forEach(tab => {
         const li = document.createElement('li');
-        li.textContent = tab.title + ' - ' + tab.url;
+        li.textContent = tab.title || tab.url;
+        li.className = tab.isActive ? 'active' : '';
         li.onclick = () => {
-            // Mark as selected (UI)
-            document.querySelectorAll('#tab-list li').forEach(li => li.classList.remove('active'));
-            li.classList.add('active');
-            browser.runtime.sendMessage({ type: "set-active-soundcloud-tab", tabId: tab.id });
-        };
-        tabList.appendChild(li);
-    });
-});
+            browser.runtime.sendMessage({ type: "set-active-soundcloud-tab", tabId: tab.tabId }, (res) => {
+                if (res.success) {
+                    //TODO Optionally provide visual feedback or close popup
+                }
+            })
+        }
+        tabListElem.appendChild(li);
+    })
+})

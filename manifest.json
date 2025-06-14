@@ -6,7 +6,7 @@
     "background": {
         "scripts": [
             "background.js"
-        ],
+        ], "type": "module",
         "service_worker": "background.js"
     },
     "content_scripts": [
@@ -20,7 +20,7 @@
         {
             "matches": ["*://soundcloud.com/*"],
             "js": ["content/soundcloud-controls.js"],
-            "run_at": "document_idle"
+            "run_at": "document_end"
         }
     ],
     "action": {

@@ -18,9 +18,7 @@ function addToolbarWhenReady() {
                         const style = document.createElement('style');
                         style.textContent = css;
                         document.head.appendChild(style);
-
-                        // All my event listeners here  
-
+                        
                         //---- Open/Close the Controller UI ----
                         const close_btn = controls.querySelector('.collapse-btn')
                         const controller = controls
@@ -37,76 +35,126 @@ function addToolbarWhenReady() {
                             controller.classList.remove('ext-hidden');
                             open_icon.classList.remove('ext-shown');
                         }
-                        
-                        //---- Press Play/Pause Button Toggle Logic ----
+
+                        /// ==== On Load, Request State ====
+                        /// sends "___-state-get-request" to [background.js]
+                        /// receives "___-state-get-response" 
+                        // Play/Pause
+                        browser.runtime.sendMessage(
+                            { type: "playpause-state-get-request" },
+                            function(response) {
+                                if (response && typeof response.state === "string") {
+                                    setPlayPauseButtonUI(response.state);
+                                }
+                            }
+                        );
+                        // Shuffle
+                        browser.runtime.sendMessage(
+                            { type: "shuffle-state-get-request" },
+                            function(response) {
+                                if (response && typeof response.state === "string") {
+                                    setShuffleButtonUI(response.state);
+                                }
+                            }
+                        )
+                        // Repeat
+                        browser.runtime.sendMessage(
+                            { type: "repeat-state-get-request" },
+                            function(response) {
+                                if (response && typeof response.state === "string") {
+                                    setRepeatButtonUI(response.state);
+                                }
+                            }
+                        )
+
+
+                        /// ==== Event Handling ====
+                        /// sends "___-toggle-request" to [background.js]
                         const playPauseBtn = controls.querySelector('.play_pause');
-                        // Asks background for current state when created
-                        browser.runtime.sendMessage({ type: "get-ui-state" }, (response) => {
-                            if (response && response.state) {
-                                updatePlayPauseIcon(response.state);
+                        const skipPrevBtn = controls.querySelector('.skip_prev');
+                        const skipNextBtn = controls.querySelector('.skip_next');
+                        const shuffle = controls.querySelector('.shuffle')
+                        const repeat = controls.querySelector('.repeat')
+
+                        async function sendSimpleRequest(type, maxRetries = 3) {
+                            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                                try {
+                                    const response = await browser.runtime.sendMessage({ type });
+                                    console.log(`${type} succeeded`, response);
+                                    return response;
+                                } catch (error) {
+                                    console.warn(`Attempt ${attempt} failed for ${type}:`, error);
+                                    if (attempt === maxRetries) {
+                                        throw error;
+                                    }
+                                    await new Promise(r => setTimeout(r, 300 * attempt));
+                                }
+                            }
+                        }
+
+                        playPauseBtn.addEventListener('click', () => sendSimpleRequest("playpause-toggle-request"));
+                        shuffle.addEventListener('click', () => sendSimpleRequest("shuffle-toggle-request"));
+                        skipPrevBtn.addEventListener('click', () => sendSimpleRequest("skip-prev-request"));
+                        skipNextBtn.addEventListener('click', () => sendSimpleRequest("skip-next-request"));
+                        
+                        repeat.addEventListener('click', async () => {
+                            const states = ['off', 'one', 'all'];
+                            let currentIndex = states.findIndex(state => repeat.classList.contains(state));
+                            const nextIndex = (currentIndex + 1) % states.length;
+                            const nextState = states[nextIndex];
+                            try {
+                                await browser.runtime.sendMessage({
+                                    type: "repeat-toggle-request",
+                                    state: nextState
+                                });
+                                repeat.classList.remove(...states);
+                                repeat.classList.add(nextState);
+                            } catch (err) {
+                                console.error('Repeat toggle failed:', err);
                             }
                         });
-                        // Sends the play/pause message to the SoundCloud tab
-                        playPauseBtn.addEventListener('click', () => {
-                            browser.runtime.sendMessage({ type: "playpause" })
-                        });
-                        // Listen for UI updates from background
-                        browser.runtime.onMessage.addListener((message, sender, sendReseponse) => {
-                            if (message.type === "update-ui-state") {
-                                updatePlayPauseIcon(message.state);
+
+
+                        /// ==== Receiving State Updates ====
+                        /// [background.js] gets an update, broadcasts "___-state-changed"
+                        const stateHandlers = {
+                            "playpause-state-changed": setPlayPauseButtonUI,
+                            "shuffle-state-changed": setShuffleButtonUI,
+                            "repeat-state-changed": setRepeatButtonUI,
+                        };
+                        browser.runtime.onMessage.addListener(function(msg) {
+                            if (msg && typeof msg.state === "string" && stateHandlers[msg.type]) {
+                                stateHandlers[msg.type](msg.state);
                             }
-                        });
-                        // Update the UI based on received response
-                        function updatePlayPauseIcon(state) {
+                        })
+
+
+                        /// ==== UI Updates ====
+                        /// this document [content.js] calls these functions
+                        // Play/Pause UI
+                        function setPlayPauseButtonUI(state) {
                             if (state === "playing") {
                                 playPauseBtn.classList.remove('paused');
                                 playPauseBtn.classList.add('playing');
-                            } else {
+                            } else if (state === "paused") {
                                 playPauseBtn.classList.add('paused');
                                 playPauseBtn.classList.remove('playing');
                             }
                         }
-
-                        //--- Skip Prev/Next Button Logic ----
-                        const skipPrevBtn = controls.querySelector('.skip_prev');
-                        const skipNextBtn = controls.querySelector('.skip_next');
-                        skipPrevBtn.addEventListener('click', () => {
-                            browser.runtime.sendMessage({ type: "skip_prev" })
-                        });
-                        skipNextBtn.addEventListener('click', () => {
-                            browser.runtime.sendMessage({ type: "skip_next" })
-                        });
-
-                        //---- Shuffle Button Cycling Logic ---- 
-                        const shuffle = controls.querySelector('.shuffle')
-                        shuffle.onclick = () => {
-                            shuffle.classList.toggle('active');
+                        // Shuffle Toggle UI
+                        function setShuffleButtonUI(state) {
+                            if (state === "active") {
+                                shuffle.classList.add('active');
+                            } else { shuffle.classList.remove('active'); }
                         }
-
-                        //---- Repeat Button Cycling log ----
-                        const repeat = controls.querySelector('.repeat')
-                        const states = ['off', 'one', 'all']
-                        repeat.addEventListener('click', () => {
-                            // Find current state index
-                            let currentIndex = states.findIndex(state => repeat.classList.contains(state));
-                            // Remove current state class
-                            if (currentIndex !== -1) repeat.classList.remove(states[currentIndex]);
-                            // Get the next state index
-                            const nextIndex = (currentIndex + 1) % states.length;
-                            repeat.classList.add(states[nextIndex]);
-                            // Downstream click logic 
-                            switch (states[nextIndex]) {
-                                case 'off':
-                                // insert for repeat: off
-                                break;
-                                case 'one':
-                                // insert for repeat: one
-                                break;
-                                case 'all':
-                                // insert for repeat: all
-                                break;
+                        // Repeat Toggle UI
+                        function setRepeatButtonUI(state) {
+                            const states = ['off', 'one', 'all'];
+                            states.forEach(s => repeat.classList.remove(s));
+                            if (states.includes(state)) {
+                                repeat.classList.add(state);
                             }
-                        });
+                        }
                     })
             })
     } else {
