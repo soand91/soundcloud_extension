@@ -18,6 +18,13 @@ function getRepeatStateFromDOM() {
     if (repeatState.classList.contains('m-all')) return 'all';
     return 'off'
 }
+function getAllStatesFromDOM() {
+    return {
+        playPause: getPlayPauseStateFromDOM(),
+        shuffle: getShuffleStateFromDOM(),
+        repeat: getRepeatStateFromDOM()
+    };
+}
 
 // Command handlers
 browser.runtime.onMessage.addListener((msg) => {
@@ -78,6 +85,35 @@ browser.runtime.onMessage.addListener((msg) => {
             type: "repeat-state-updated",
             state: currentState
         })
+    }
+    if (msg.type === "skip-prev-command") {
+        console.log("Received skip-prev command in SC tab");
+        try {
+            if (prevBtn) {
+                prevBtn.click();
+                console.log("Skip prev button clicked");
+            } else {
+                console.error("Skip prev button not found in DOM");
+            }
+        } catch (e) {
+            console.error("Error handling the skip-prev command:", e);
+        }
+    }
+    if (msg.type === "skip-next-command") {
+        console.log("Received skip-next command in SC tab");
+        try {
+            if (nextBtn) {
+                nextBtn.click();
+                console.log("Skip next button clicked");
+            } else {
+                console.error("Skip next button not found in DOM");
+            }
+        } catch (e) {
+            console.error("Error handling the skip-next command:", e);
+        }
+    }
+    if (msg.type === "get-all-states") {
+        return Promise.resolve(getAllStatesFromDOM());
     }
 })
 

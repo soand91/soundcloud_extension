@@ -1,62 +1,73 @@
 let soundcloudTabs = new Map();
 let activeSoundCloudTabId = null;
 
-// Find all current SoundCloud tabs and add them
+// On extension startup: find all current SoundCloud tabs and add them
 browser.tabs.query({url: "*://soundcloud.com/*"}).then(tabs => {
     for (const tab of tabs) {
         soundcloudTabs.set(tab.id, { title: tab.title, url: tab.url });
-        activeSoundCloudTabId = tab.id //TODO logic for most recent/first, etc.
     }
-    console.log("Populated SoundCloud tabs on startup", Array.from(soundcloudTabs.entries()))
-})
-// Update when tabs are opened
+    // Set Most recently active tab as active (or pick first if unsure)
+    if (tabs.length > 0) {
+        activeSoundCloudTabId = tabs[tabs.length - 1].id;
+        updateAllStatesForActiveTab();
+    }
+    console.log(
+        "Populated SoundCloud tabs on startup", 
+        Array.from(soundcloudTabs.entries()), 
+        "Active:", 
+        activeSoundCloudTabId
+    );
+});
+// On tab updates: add/remove/update as necessary, update active as needed
 browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (!tab.url) return;
     if (tab.url.includes('soundcloud.com')) {
+        // Add or update tab entry
+        soundcloudTabs.set(tabId, { title: tab.title, url: tab.url });
+        // If navigation completed or url changed, make it active
         if (changeInfo.status === 'complete' || changeInfo.url) {
-            soundcloudTabs.set(tabId, { title: tab.title, url: tab.url });
-            activeSoundCloudTabId = tabId;
-            console.log("SoundCloud tab set/updated", tabId, tab.url);
+            if (activeSoundCloudTabId !== tabId) {
+                activeSoundCloudTabId = tabId;
+                updateAllStatesForActiveTab();
+                console.log("SoundCloud tab set/updated and made active:", tabId, tab.url);
+            }
         }
     } else {
+        // Navigated away from SoundCloud
         if (soundcloudTabs.has(tabId)) {
             soundcloudTabs.delete(tabId);
             console.log("Tab navigated away, removed from SC set", tabId);
+            if (tabId === activeSoundCloudTabId) {
+                // Set new active if needed
+                const remaining = Array.from(soundcloudTabs.keys());
+                activeSoundCloudTabId = remaining.length > 0 ? remaining[0] : null;
+                updateAllStatesForActiveTab();
+                console.log("Active tab removed, new active:", activeSoundCloudTabId);
+            }
         }
     }
 });
-browser.tabs.onRemoved.addListener((tabId) => {
-    if (soundcloudTabs.has(tabId)) {
-        soundcloudTabs.delete(tabId);
-        console.log("SoundCloud tab closed:", tabId);
-    }
-    // If the closed tab was the active one, pick new of any remaining
-    if (tabId === activeSoundCloudTabId) {
-        const tabIds = Array.from(soundcloudTabs.keys());
-        if (tabIds.length > 0) {
-            activeSoundCloudTabId = tabIds[0];
-            //TODO Optionally: broadcast to popup/content.js that the active tab has changed
-        } else {
-            activeSoundCloudTabId = null;
-            //TODO Optionally: broadcast "no SoundCloud tabs open"
-        }
-    }
-});
-// On tab activation, "last interacted" logic
+// On tab activation: "last interacted" logic
 browser.tabs.onActivated.addListener(async ({ tabId }) => {
     try {
         const tab = await browser.tabs.get(tabId);
-        if (tab.url && tab.url.includes("soundcloud.com")) {
+        if (tab.url && tab.url.includes("soundcloud.com") && tabId !== activeSoundCloudTabId) {
             activeSoundCloudTabId = tabId;
+            updateAllStatesForActiveTab();
             console.log("Active SC tab set by activation:", tabId);
         }
     } catch (e) {}
 });
-// On navigation to SoundCloud
-browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    if (changeInfo.status === 'complete' && tab.url && tab.url.includes('soundcloud.com')) {
-        activeSoundCloudTabId = tabId;
-        console.log("Active SC tab set by navigation", tabId);
+// On tab removal: clean up map and active
+browser.tabs.onRemoved.addListener(tabId => {
+    if (soundcloudTabs.delete(tabId)) {
+        console.log("SoundCloud tab closed:", tabId);
+    }
+    if (tabId === activeSoundCloudTabId) {
+        const remaining = Array.from(soundcloudTabs.keys());
+        activeSoundCloudTabId = remaining.length > 0 ? remaining[0] : null;
+        updateAllStatesForActiveTab();
+        console.log("Active tab closed, new active:", activeSoundCloudTabId);
     }
 });
 
@@ -72,6 +83,7 @@ async function ensureSoundCloudTabId(callback) {
                 if (tab.url.includes('soundcloud.com')) {
                     console.log("Returning existing tab");
                     callback(activeSoundCloudTabId);
+                    updateAllStatesForActiveTab();
                     return;
                 }
             } catch (e) {
@@ -88,6 +100,7 @@ async function ensureSoundCloudTabId(callback) {
                 console.log("Tab found:", tab.id, tab.url);
                 if (tab.url.includes('soundcloud.com')) {
                     activeSoundCloudTabId = tabId;
+                    updateAllStatesForActiveTab();
                     console.log("Setting new active tab:", tabId);
                     callback(tabId);
                     return;
@@ -105,7 +118,6 @@ async function ensureSoundCloudTabId(callback) {
         callback(null);
     }
 }
-
 // Helper: broadcaster function for confirmation handling
 function broadcastStateToContentTabs(type, state) {
     browser.tabs.query({ url: ["<all_urls>"] }, (tabs) => {
@@ -115,6 +127,20 @@ function broadcastStateToContentTabs(type, state) {
             }
         });
     });
+}
+// Helper: updates all states on active tab switch
+function updateAllStatesForActiveTab() {
+    if (!activeSoundCloudTabId) {
+        return;
+    }
+    browser.tabs.sendMessage(activeSoundCloudTabId, { type: "get-all-states" })
+        .then(states => {
+            broadcastStateToContentTabs('all-states-updated', states);
+            console.log("Got states from active tab:", states);
+        })
+        .catch(err => {
+            console.warn("Failed to get states from active tab:", err);
+        })
 }
 
 let playpauseState = "paused";
@@ -167,7 +193,7 @@ browser.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
                 return;
             }
             browser.tabs.sendMessage(tabId, { type: "playpause-toggle-command" })
-                .then(() => console.log("Playpause toggled"))
+                .then(() => console.log("Playpause command sent"))
                 .catch(err => console.error("Failed to send playpause:", err));
         });
         return true;
@@ -179,7 +205,7 @@ browser.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
                 return;
             }
             browser.tabs.sendMessage(tabId, { type: "shuffle-toggle-command" })
-                .then(() => console.log("Playpause toggled"))
+                .then(() => console.log("Shuffle command sent"))
                 .catch(err => console.error("Failed to send playpause:", err));
         });
         return true;
@@ -191,9 +217,33 @@ browser.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
                 return;
             }
             browser.tabs.sendMessage(tabId, { type: "repeat-toggle-command", state: msg.state })
-                .then(() => console.log("Playpause toggled"))
+                .then(() => console.log("Repeat command sent"))
                 .catch(err => console.error("Failed to send playpause:", err));
         })
+        return true;
+    }
+    else if (msg.type === "skip-prev-request") {
+        ensureSoundCloudTabId(tabId => {
+            if (tabId === null) {
+                console.log("No SoundCloud tab found");
+                return;
+            }
+            browser.tabs.sendMessage(tabId, { type: "skip-prev-command" })
+                .then(() => console.log("Skip-prev command sent"))
+                .catch(err => console.error("Failed to send skip-prev", err));
+        });
+        return true;
+    }
+    else if (msg.type === "skip-next-request") {
+        ensureSoundCloudTabId(tabId => {
+            if (tabId === null) {
+                console.log("No SoundCloud tab found");
+                return;
+            }
+            browser.tabs.sendMessage(tabId, { type: "skip-next-command" })
+                .then(() => console.log("Skip-next command sent"))
+                .catch(err => console.error("Failed to send skip-next", err));
+        });
         return true;
     }
 
@@ -212,28 +262,6 @@ browser.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
     else if (msg.type === "repeat-state-updated") {
         repeatState = msg.state;
         broadcastStateToContentTabs("repeat-state-changed", repeatState);
-        return true;
-    }
-    
-    // messages regarding skip previous and next buttons
-    else if (msg.type === "skip_prev") {
-        ensureSoundCloudTabId(tabId => {
-            if (tabId !== null) {
-                browser.tabs.sendMessage(tabId, { type: "skip_prev" });
-            } else {
-                console.log("No SoundCloud tabs found.");
-            }
-        })
-        return true;
-    }
-    else if (msg.type === "skip_next") {
-        ensureSoundCloudTabId(tabId => {
-            if (tabId !== null) {
-                browser.tabs.sendMessage(tabId, { type: "skip_next" });
-            } else {
-                console.log("No SoundCloud tabs found.");
-            }
-        })
         return true;
     }
 });

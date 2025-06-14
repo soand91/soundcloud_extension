@@ -107,6 +107,7 @@ function addToolbarWhenReady() {
                                     type: "repeat-toggle-request",
                                     state: nextState
                                 });
+                                console.log("repeat-toggle-request succeeded")
                                 repeat.classList.remove(...states);
                                 repeat.classList.add(nextState);
                             } catch (err) {
@@ -123,7 +124,29 @@ function addToolbarWhenReady() {
                             "repeat-state-changed": setRepeatButtonUI,
                         };
                         browser.runtime.onMessage.addListener(function(msg) {
-                            if (msg && typeof msg.state === "string" && stateHandlers[msg.type]) {
+                            console.log("raw message received:", JSON.stringify(msg));
+                            if (!msg || typeof msg !== "object") return;
+                            // When it is an all-states update
+                            if (msg.type === "all-states-updated") {
+                                const states = msg.state || msg;
+                                console.log("Extracted states:", {
+                                    playPause: states.playPause,
+                                    shuffle: states.shuffle,
+                                    repeat: states.repeat
+                                });
+                                if (states.playPause) {
+                                    stateHandlers["playpause-state-changed"](states.playPause);
+                                }
+                                if (states.shuffle) {
+                                    stateHandlers["shuffle-state-changed"](states.shuffle);
+                                }
+                                if (states.repeat) {
+                                    stateHandlers["repeat-state-changed"](states.repeat);
+                                }
+                            }
+                            // When it is a single-state update
+                            if (typeof msg.state === "string" && stateHandlers[msg.type]) {
+                                console.log("Single state:", msg.type, msg.state)
                                 stateHandlers[msg.type](msg.state);
                             }
                         })
@@ -133,6 +156,7 @@ function addToolbarWhenReady() {
                         /// this document [content.js] calls these functions
                         // Play/Pause UI
                         function setPlayPauseButtonUI(state) {
+                            console.log("setPlayPauseButtonUI called with:", state);
                             if (state === "playing") {
                                 playPauseBtn.classList.remove('paused');
                                 playPauseBtn.classList.add('playing');
@@ -143,12 +167,14 @@ function addToolbarWhenReady() {
                         }
                         // Shuffle Toggle UI
                         function setShuffleButtonUI(state) {
+                            console.log("setShuffleButtonUI called with:", state);
                             if (state === "active") {
                                 shuffle.classList.add('active');
                             } else { shuffle.classList.remove('active'); }
                         }
                         // Repeat Toggle UI
                         function setRepeatButtonUI(state) {
+                            console.log("setRepeatButtonUI called with:", state);
                             const states = ['off', 'one', 'all'];
                             states.forEach(s => repeat.classList.remove(s));
                             if (states.includes(state)) {
