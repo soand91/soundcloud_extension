@@ -5,6 +5,14 @@ let activeSoundCloudTabId = null;
 browser.tabs.query({url: "*://soundcloud.com/*"}).then(tabs => {
     for (const tab of tabs) {
         soundcloudTabs.set(tab.id, { title: tab.title, url: tab.url });
+        browser.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: ["content/soundcloud-controls.js"]
+        }).then(() => {
+            console.log(`Manually injected controls into tab ${tab.id}`);
+        }).catch(err => {
+            console.warn("Script injection failed", err);
+        });
     }
     // Set Most recently active tab as active (or pick first if unsure)
     if (tabs.length > 0) {
@@ -29,6 +37,12 @@ browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
             if (activeSoundCloudTabId !== tabId) {
                 activeSoundCloudTabId = tabId;
                 updateAllStatesForActiveTab();
+                browser.scripting.executeScript({
+                    target: { tabId },
+                    files: ["content/soundcloud-controls.js"]
+                }).then(() => {
+                    console.log(`Injected into newly loaded tab ${tabId}`);
+                }).catch(err => console.warn(err));
                 console.log("SoundCloud tab set/updated and made active:", tabId, tab.url);
             }
         }

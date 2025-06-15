@@ -7,6 +7,7 @@
     transition: opacity 0.4s, transform 0.4s;
     opacity: 1; pointer-events: auto;
     transform: translateY(0%);
+    z-index: 2147483647;
 }
 .controller.ext-hidden {
     opacity: 0; pointer-events: none;

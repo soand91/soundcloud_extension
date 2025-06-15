@@ -20,7 +20,7 @@
         {
             "matches": ["*://soundcloud.com/*"],
             "js": ["content/soundcloud-controls.js"],
-            "run_at": "document_end"
+            "run_at": "document_idle"
         }
     ],
     "action": {
