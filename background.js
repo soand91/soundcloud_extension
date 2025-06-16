@@ -1,5 +1,11 @@
 let soundcloudTabs = new Map();
 let activeSoundCloudTabId = null;
+// Stored Popup Settings
+const SETTINGS_KEYS = [
+    'start-open-toggle',
+    'active-tab-toggle',
+    'theme-default-toggle'
+];
 
 // On extension startup: find all current SoundCloud tabs and add them
 browser.tabs.query({url: "*://soundcloud.com/*"}).then(tabs => {
@@ -164,7 +170,7 @@ let shuffleState = "inactive";
 console.log("Background script loaded");
 // Update when you get any button messages
 browser.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
-    console.log("Background.js: received message:", msg);
+    console.log("[Background] Received message:", msg);
     // handles "get-soundcloud-tabs" from [popup.js] and returns the table of all sc tabs open
     if (msg.type === "get-soundcloud-tabs") {
         const tabs = Array.from(soundcloudTabs.entries()).map(([tabId, info]) => ({
@@ -278,4 +284,62 @@ browser.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
         broadcastStateToContentTabs("repeat-state-changed", repeatState);
         return true;
     }
+    
+    // Respond to [content.js] setting requests
+    else if (msg.type === 'get-settings') {
+        const settings = await browser.storage.local.get(SETTINGS_KEYS);
+        console.log("[Background] Responding to get-settings with:", settings);
+        return settings;
+    }
+    // Respond to [content.js] state requests
+    else if (msg.type === 'get-all-states') {
+        console.log("[Background] Responding to get-all-states with:", {
+            playpause: playpauseState,
+            shuffle: shuffleState,
+            repeat: repeatState
+        });
+        return {
+            playpause: playpauseState,
+            shuffle: shuffleState,
+            repeat: repeatState
+        };
+    }
 });
+
+// Load Settings on Startup
+browser.runtime.onStartup.addListener(() => {
+    browser.storage.local.get(SETTINGS_KEYS).then(settings => {
+        applySettingsToAllTabs();
+        console.log("[Startup] Loaded settings:", settings);
+    });
+});
+// Load Settings when extension freshly loaded or reloaded
+browser.runtime.onInstalled.addListener(() => {
+    browser.storage.local.get(SETTINGS_KEYS).then(settings => {
+        applySettingsToAllTabs();
+        console.log("[Install] Loaded settings:", settings);
+    })
+})
+// Update Settings when popup changes settings
+browser.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    for (const [key, { oldValue, newValue }] of Object.entries(changes)) {
+        if (SETTINGS_KEYS.includes(key)) {
+            applySettingsToAllTabs();
+            console.log(`[Settings Change] ${key}:`, oldValue, "→", newValue);
+        }
+    }
+})
+// Helper that applies all settings to all tabs
+function applySettingsToAllTabs() {
+    browser.storage.local.get(SETTINGS_KEYS).then(settings => {
+        browser.tabs.query({}).then(tabs => {
+            for (const tab of tabs) {
+                browser.tabs.sendMessage(tab.id, {
+                    type: 'settings-updated',
+                    settings
+                }).catch(() => {});
+            }
+        });
+    });
+}

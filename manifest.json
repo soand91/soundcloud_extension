@@ -6,8 +6,9 @@
     "background": {
         "scripts": [
             "background.js"
-        ], "type": "module",
-        "service_worker": "background.js"
+        ],
+        "service_worker": "background.js",
+        "type": "module"
     },
     "content_scripts": [
         {
@@ -27,13 +28,13 @@
         "default_popup": "popup/popup.html"
     },
     "permissions": [
-        "tabs", "activeTab", "scripting"
+        "tabs", "activeTab", "scripting", "storage"
     ],
     "host_permissions": [
         "<all_urls>", "*://soundcloud.com/*"
     ],
     "web_accessible_resources": [{
-        "resources": ["controls/controls.html", "controls/controls.css", "content/soundcloud-controls.js"],
+        "resources": ["controls/controls.html", "controls/controls.css", "content/soundcloud-controls.js", "lib/settings.js"],
         "matches": ["<all_urls>"]
     }]
 }

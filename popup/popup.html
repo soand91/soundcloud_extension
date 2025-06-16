@@ -4,7 +4,40 @@
         <link rel="stylesheet" href="popup.css">
     </head>
     <body>
-        <ul id="tab-list"></ul>
+        <div class="popup-wrapper">
+            <h1>SoundCloud UI Extender</h1>
+            <div class="settings">
+                <header id="settings-header">
+                    <h2>User Settings</h2>
+                </header>
+                <div class="toolbar-default">
+                    <label class="switch">
+                        <input type="checkbox" id="start-open-toggle">
+                        <span class="slider"></span>
+                    </label>
+                    Toolbar default: <span id="start-open-toggle-label">closed</span>
+                </div>
+                <div class="active-default">
+                    <label class="switch">
+                        <input type="checkbox" id="active-tab-toggle">
+                        <span class="slider"></span>
+                    </label>
+                    Active Tab Priority: <span id="active-tab-toggle-label">Popup-select</span>
+                </div>
+                <div class="theme-default">
+                    <label class="switch">
+                        <input type="checkbox" id="theme-default-toggle">
+                        <span class="slider"></span>
+                    </label>
+                    <span id="theme-default-toggle-label">
+                        Light Mode
+                    </span>
+                </div>
+            </div>
+            <div class="SC-tabs-list">
+                <h2>Open SoundCloud Tabs</h2>
+            </div>
+        </div>
         <script src="popup.js"></script>
     </body>
 </html>
