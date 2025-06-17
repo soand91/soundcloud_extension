@@ -209,13 +209,17 @@ function setupButtonListeners(root) {
             const nextIndex = (currentIndex + 1) % states.length;
             const nextState = states[nextIndex];
             try {
-                await browser.runtime.sendMessage({
+                const response = await browser.runtime.sendMessage({
                     type: "repeat-toggle-request",
                     state: nextState
                 });
-                console.log("repeat-toggle-request succeeded")
-                repeat.classList.remove(...states);
-                repeat.classList.add(nextState);
+                if (response && response.success) {
+                    console.log("repeat-toggle-request succeeded")
+                    repeat.classList.remove(...states);
+                    repeat.classList.add(nextState);
+                } else {
+                    warn("repeat-toggle-request failed or was ignored.")
+                }
             } catch (err) {
                 console.error('Repeat toggle failed:', err);
             } 

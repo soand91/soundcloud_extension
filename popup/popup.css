@@ -1,3 +1,6 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+}
 body {
     width: 320px; height: 400px;
     position: relative;
@@ -59,4 +62,117 @@ input:checked + .slider:before {
 }
 .SC-tabs-list {
     display: flex;
+}
+h3 {
+    font-size: 14px;
+    margin-top: 5px;
+    margin-bottom: 5px;
+}
+.report-section {
+    outline: 1px dashed green;
+    display: flex;
+    flex-direction: rows;
+    gap: 5px;
+    margin-top: auto; margin-left: auto;
+}
+#report-Btn {
+    width: 26px;
+    height: 26px;
+    justify-content: center;
+    align-items: center;
+    display: flex;
+    border-radius: 50%;
+    cursor: pointer;
+}
+.report-icon {
+    color: red;
+    transition: color 0.2s ease;
+}
+.report-icon:hover {
+    color: pink;
+}
+.report-card {
+    z-index: 1000;
+    width: 290px;
+    height: 250px;
+    margin-bottom: 5px;
+    border-radius: 6px;
+    display: none;
+    grid-template-rows: 4fr 30px;
+    grid-template-columns: repeat(5, 1fr);
+    position: absolute;
+    background: pink;
+    z-index: 10;
+    bottom: 31px;
+    left: 0px;
+}
+.report-card.card-shown {
+    display: grid; 
+}
+.report-info {
+    grid-column: 1 / -1;
+    outline: 1px dashed green;
+    padding: 0px 5px 0px 5px;
+    max-height: 220px;
+    display: grid;
+    grid-template-rows: 130px 90px;
+}
+#send-container {
+    grid-column: span 2;
+    display: flex;
+}
+#send-Btn {
+    height: 20px; width: 42.5px;
+    padding: 0;
+    border: none;
+    border-radius: 20px;
+    cursor: pointer;
+    margin-top: auto;
+    margin-bottom: auto;
+}
+#playback {
+    background: red;
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+    cursor: pointer;
+}
+#page {
+    background: lightblue;
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+    cursor: pointer;
+}
+.selected {
+    color: white;
+}
+.hidden {
+    display: none;
+}
+
+.report-input {
+    width: 200px;
+}
+.report-fieldset {
+    margin: 0;
+    border: none;
+    border-top: 1px dashed;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    max-height: 109px;
+}
+.report-legend {
+    padding: 0;
+}
+input {
+    margin-left: 3px;
+}
+.report-label {
+    margin-bottom: 5px;
+}
+.report-text-wrapper {
+    display: flex;
+    flex-direction: column;
+    position: relative;
 }

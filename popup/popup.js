@@ -40,6 +40,32 @@ document.addEventListener('DOMContentLoaded', async() => {
             });
         });
     });
+    // Report Menu opener logic
+    const reportBtn = document.getElementById('report-Btn');
+    const reportCard = document.querySelector('.report-card');
+    reportBtn.addEventListener('click', () => {
+        console.log("clicked");
+        reportCard.classList.toggle('card-shown');
+    })
+    // Report Menu Tab Logic
+    let selectedTab = "page"
+    const tabViews = {
+        playback: document.getElementById('playback-info'),
+        page: document.getElementById('page-info'),
+    }
+
+    document.querySelectorAll('.report-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            if (tab.id === selectedTab) return; 
+            document.getElementById(selectedTab).classList.remove('selected');
+            tab.classList.add('selected');
+            
+            tabViews[selectedTab].classList.add('hidden');
+            tabViews[tab.id].classList.remove('hidden');
+            
+            selectedTab = tab.id;
+        })
+    })
 });
 
 function getLabelText(key, value) {
