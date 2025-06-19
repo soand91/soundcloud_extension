@@ -118,6 +118,7 @@ async function syncAllStates() {
         playpause: response.playpause,
         shuffle: response.shuffle,
         repeat: response.repeat,
+        time: response.time,
         like: response.like,
         follow: response.follow
     });
@@ -161,6 +162,20 @@ function setRepeatButtonUI(state, root) {
     const validStates = ['off', 'one', 'all'];
     validStates.forEach(s => btn.classList.remove(s));
     if (validStates.includes(state)) btn.classList.add(state);
+}
+function setTimeDisplayUI(state, root) {
+    const btn = root.querySelector('.timeDuration');
+    const left = root.getElementById('duration_left');
+    const total = root.getElementById('duration_total');
+    if (!btn) return;
+    if (state === 'remaining') {
+        left.classList.remove('time_hidden');
+        total.classList.add('time_hidden');
+    }
+    if (state === 'duration') {
+        left.classList.add('time_hidden');
+        total.classList.remove('time_hidden');
+    }
 }
 function setLikeUI(state, root) {
     const btn = root.querySelector('.soundBadge_like');
@@ -217,13 +232,13 @@ function setupButtonListeners(root) {
     const skipNextBtn   = root.querySelector('.skip_next');
     const close_btn     = root.querySelector('.collapse-btn');
     const open_icon     = root.querySelector('.ext-icon');
-    const timeBtn = root.querySelector('.timeDuration');
-    const badgeAvatar = root.querySelector('.soundBadge_avatar');
-    const badgeArtist = root.querySelector('.artistLink')
-    const badgeTitle = root.querySelector('.titleLink');
-    const badgeLike = root.querySelector('.soundBadge_like');
-    const badgeFollow = root.querySelector('.soundBadge_follow');
-    const badgeQueue = root.querySelector('.soundBadge_queue');
+    const timeBtn       = root.querySelector('.timeDuration');
+    const badgeAvatar   = root.querySelector('.soundBadge_avatar');
+    const badgeArtist   = root.querySelector('.artistLink')
+    const badgeTitle    = root.querySelector('.titleLink');
+    const badgeLike     = root.querySelector('.soundBadge_like');
+    const badgeFollow   = root.querySelector('.soundBadge_follow');
+    const badgeQueue    = root.querySelector('.soundBadge_queue');
 
     async function sendSimpleRequest(type, maxRetries = 3) {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -288,19 +303,24 @@ function setupMessageListeners() {
         "playpause-state-changed": setPlayPauseButtonUI,
         "shuffle-state-changed": setShuffleButtonUI,
         "repeat-state-changed": setRepeatButtonUI,
+        "time-display-changed": setTimeDisplayUI,
         "like-state-changed": setLikeUI,
         "follow-state-changed": setFollowUI,
     };
     browser.runtime.onMessage.addListener((msg) => {
         log("Incoming message:", msg);
         if (!msg || typeof msg !== 'object') return;
+
         // When it is an all-states update
-        if (msg.type === "all-states-updated") {
+        if (msg.type === "all-states-updated") { //TODO MAYBE
             const states = msg.state || msg;
             log("Received states update:", {
                 playPause: states.playPause,
                 shuffle: states.shuffle,
-                repeat: states.repeat
+                repeat: states.repeat,
+                time: states.time,
+                like: states.like,
+                follow: states.follow
             });
             if (states.playPause) {
                 stateHandlers["playpause-state-changed"](states.playPause, shadowRoot);
@@ -310,6 +330,15 @@ function setupMessageListeners() {
             }
             if (states.repeat) {
                 stateHandlers["repeat-state-changed"](states.repeat, shadowRoot);
+            }
+            if (states.time) {
+                stateHandlers["time-display-changed"](states.time, shadowRoot);
+            }
+            if (states.like) {
+                stateHandlers["like-state-changed"](states.like, shadowRoot);
+            }
+            if (states.follow) {   
+                stateHandlers["follow-state-changed"](states.follow, shadowRoot);
             }
         }
         // When it is a single-state update

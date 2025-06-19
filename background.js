@@ -4,6 +4,7 @@ let activeSoundCloudTabId = null;
 let playpauseState = "paused";
 let repeatState = "off";
 let shuffleState = "inactive";
+let displayState = 'duration';
 let likeState = 'unliked';
 let followState = 'unfollowed';
 const DEFAULT_SETTINGS = {
@@ -500,7 +501,10 @@ async function handleRuntimeMessage(msg, sender) {
             broadcastStateToContentTabs("repeat-state-changed", repeatState);
             return true;
 
-
+        case "time-display-state-updated":
+            displayState = msg.state;
+            broadcastStateToContentTabs("time-display-changed", displayState);
+            return true;
         case "like-state-updated":
             likeState = msg.state;
             broadcastStateToContentTabs("like-state-changed", likeState);
@@ -520,6 +524,7 @@ async function handleRuntimeMessage(msg, sender) {
                 playpause: playpauseState,
                 shuffle: shuffleState,
                 repeat: repeatState,
+                time: displayState,
                 like: likeState,
                 follow: followState
             });
@@ -527,6 +532,7 @@ async function handleRuntimeMessage(msg, sender) {
                 playpause: playpauseState,
                 shuffle: shuffleState,
                 repeat: repeatState,
+                time: displayState,
                 like: likeState,
                 follow: followState
             };

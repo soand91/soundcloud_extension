@@ -37,8 +37,12 @@ function getRepeatStateFromDOM() {
     if (repeatState.classList.contains('m-all')) return 'all';
     return 'off'
 }
-function getTimeDisplayStateFromDOM() { //TODO SPAN DETECTOR
-    return timeBtn.classList.contains('') ? "" : "";
+function getTimeDisplayStateFromDOM() {
+    const timeSpan = document.querySelector('.playbackTimeline__duration span[aria-hidden="true"]');
+    if (!timeSpan) return "unknown";
+
+    const text = timeSpan.textContent.trim();
+    return text.startsWith("-") ? "remaining" : "duration";
 }
 function getLikeStateFromDOM() {
     const title = badgeLike?.getAttribute("title") || "";
@@ -64,6 +68,7 @@ function getAllStatesFromDOM() {
         playPause: getPlayPauseStateFromDOM(),
         shuffle: getShuffleStateFromDOM(),
         repeat: getRepeatStateFromDOM(),
+        time: getTimeDisplayStateFromDOM(),
         like: getLikeStateFromDOM(),
         follow: getFollowStateFromDOM()
     };
@@ -121,13 +126,13 @@ const clickCommandMap = {
         label: "Skip next button",
         getElement: () => nextBtn
     },
-    "time-btn-command": { //TODO
+    "time-btn-command": {
         label: "Time display button",
         getElement: () => timeBtn,
         postClick: () => {
             const currentState = getTimeDisplayStateFromDOM();
             browser.runtime.sendMessage({
-                type: "time-btn-state-updated",
+                type: "time-display-state-updated",
                 state: currentState
             });
         }
@@ -273,6 +278,11 @@ function setupObserver(selector, type, getStateFn) {
 setupObserver('.playControl', "playpause", getPlayPauseStateFromDOM);
 setupObserver('.shuffleControl', "shuffle", getShuffleStateFromDOM);
 setupObserver('.repeatControl', "repeat", getRepeatStateFromDOM);
+setupObserver(
+    '.playbackTimeline__duration span[aria-hidden="true"]',
+    "time-display",
+    getTimeDisplayStateFromDOM
+);
 setupObserver('.playbackSoundBadge__like', "like", getLikeStateFromDOM);
 setupObserver('.playbackSoundBadge__follow', "follow", getFollowStateFromDOM);
 
