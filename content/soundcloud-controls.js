@@ -45,181 +45,104 @@ function getAllStatesFromDOM() {
     };
 }
 
+const clickCommandMap = {
+    "playpause-toggle-command": {
+        label: "Play/Pause button",
+        getElement: () => playBtn,
+        postClick: () => {
+            const currentState = getPlayPauseStateFromDOM();
+            browser.runtime.sendMessage({
+                type: "playpause-state-updated",
+                state: currentState
+            });
+        }
+    },
+    "shuffle-toggle-command": {
+        label: "Shuffle button",
+        getElement: () => shuffleState,
+        postClick: () => {
+            const currentState = getShuffleStateFromDOM();
+            browser.runtime.sendMessage({
+                type: "shuffle-state-updated",
+                state: currentState
+            });
+        }
+    },
+    "repeat-toggle-command": {
+        label: "Repeat button",
+        getElement: () => repeatState,
+        postClick: () => {
+            const desiredState = msg.state; // "off", "one", or "all"
+            const states = ['off', 'one', 'all'];
+            let currentState = getRepeatStateFromDOM();
+            let safety = 0;
+            // Cycle until reaching desired state and prevent infinite loop
+            while (currentState !== desiredState && safety < states.length) {
+                repeatState.click();
+                currentState = getRepeatStateFromDOM();
+                safety++;
+            }
+            // Report the new state back to the background.js 
+            browser.runtime.sendMessage({
+                type: "repeat-state-updated",
+                state: currentState
+            })
+        }
+    },
+    "skip-prev-command": {
+        label: "Skip prev button",
+        getElement: () => prevBtn
+    },
+    "skip-next-command": {
+        label: "Skip next button",
+        getElement: () => nextBtn
+    },
+    "time-btn-command": {
+        label: "Time display button",
+        getElement: () => timeBtn
+    },
+    "avatar-click-command": {
+        label: "Artist portrait link",
+        getElement: () => badgeArtist
+    },
+    "artist-click-command": {
+        label: "Artist link",
+        getElement: () => badgeArtist
+    },
+    "title-click-command": {
+        label: "Title link",
+        getElement: () => badgeTitle
+    },
+    "like-click-command": {
+        label: "Like button",
+        getElement: () => badgeLike
+    },
+    "follow-click-command": {
+        label: "Follow button", 
+        getElement: () => badgeFollow
+    },
+    "queue-click-command": {
+        label: "Queue button",
+        getElement: () => badgeQueue
+    }
+}
+
 // Command handlers
 browser.runtime.onMessage.addListener((msg) => {
     scLog("SC Controls: Received message", msg);
-    if (msg.type === "playpause-toggle-command") {
-        scLog("Received playpause-toggle-command in SC tab");
+    // Dry centralized handler
+    if (msg.type in clickCommandMap) {
+        const config = clickCommandMap[msg.type];
+        scLog(`Received ${msg.type} in SC tab`);
         try {
-            if (playBtn) {
-                playBtn.click();
-                scLog("Play button clicked");
-                setTimeout(() => {
-                    const currentState = getPlayPauseStateFromDOM();
-                    browser.runtime.sendMessage({
-                        type: "playpause-state-updated",
-                        state: currentState
-                    });
-                }, 50);
-            } else {
-                scError("Play button not found in DOM");
-            }
+            handleClickCommand({
+                label: config.label,
+                customElement: config.getElement?.(),
+                selector: config.selector,
+                postClick: config.postClick
+            });
         } catch (e) {
-            scError("Error handling playpause command:", e);
-        }
-    }
-    if (msg.type === "shuffle-toggle-command") {
-        scLog("Received shuffle-toggle-command in SC tab");
-        try {
-            if (shuffleState) {
-                shuffleState.click();
-                scLog("Shuffle button clicked");
-                setTimeout(() => {
-                    const currentState = getShuffleStateFromDOM();
-                    browser.runtime.sendMessage({
-                        type: "shuffle-state-updated",
-                        state: currentState
-                    });
-                }, 50);
-            } else {
-                scError("Shuffle button not found in DOM");
-            }
-        } catch (e) {
-            scError("Error handling shuffle command", e);
-        }
-    }
-    if (msg.type === "repeat-toggle-command") {
-        const desiredState = msg.state; // "off", "one", or "all"
-        const states = ['off', 'one', 'all'];
-        let currentState = getRepeatStateFromDOM();
-        let safety = 0;
-        // Cycle until reaching desired state and prevent infinite loop
-        while (currentState !== desiredState && safety < states.length) {
-            repeatState.click();
-            currentState = getRepeatStateFromDOM();
-            safety++;
-        }
-        // Report the new state back to the background.js 
-        browser.runtime.sendMessage({
-            type: "repeat-state-updated",
-            state: currentState
-        })
-    }
-    if (msg.type === "skip-prev-command") {
-        scLog("Received skip-prev command in SC tab");
-        try {
-            if (prevBtn) {
-                prevBtn.click();
-                scLog("Skip prev button clicked");
-            } else {
-                scError("Skip prev button not found in DOM");
-            }
-        } catch (e) {
-            scError("Error handling the skip-prev command:", e);
-        }
-    }
-    if (msg.type === "skip-next-command") {
-        scLog("Received skip-next command in SC tab");
-        try {
-            if (nextBtn) {
-                nextBtn.click();
-                scLog("Skip next button clicked");
-            } else {
-                scError("Skip next button not found in DOM");
-            }
-        } catch (e) {
-            scError("Error handling the skip-next command:", e);
-        }
-    }
-    if (msg.type === "time-btn-command") {
-        scLog("Received time-btn command in SC tab");
-        try {
-            if (timeBtn) {
-                timeBtn.click();
-                scLog("Time button clicked");
-            } else {
-                scError("Time button not found in DOM");
-            }
-        } catch (e) {
-            scError("Error handling the time-btn command:", e);
-        }
-    }        
-    if (msg.type === "avatar-click-command") {
-        scLog("Received avatar-click command in SC tab");
-        try {
-            if (badgeTitle) {
-                badgeTitle.click();
-                scLog("Avatar clicked");
-            } else {
-                scError("Avatar not found in DOM");
-            }
-        } catch (e) {
-            scError("Error handling the avatar click command:", e);
-        }
-    }
-    if (msg.type === "artist-click-command") {
-        scLog("Received artist-click command in SC tab");
-        try {
-            if (badgeArtist) {
-                badgeArtist.click();
-                scLog("Artist link clicked");
-            } else {
-                scError("Artist link not found in DOM");
-            }
-        } catch (e) {
-            scError("Error handling the artist click command:", e);
-        }
-    }
-    if (msg.type === "title-click-command") {
-        scLog("Received title-click command in SC tab");
-        try {
-            if (badgeTitle) {
-                badgeTitle.click();
-                scLog("Title link clicked");
-            } else {
-                scError("Title link not found in DOM");
-            }
-        } catch (e) {
-            scError("Error handling the title click command:", e);
-        }
-    }
-    if (msg.type === "like-click-command") {
-        scLog("Received like-click command in SC tab");
-        try {
-            if (badgeLike) {
-                badgeLike.click();
-                scLog("Like button clicked");
-            } else {
-                scError("Like button not found in DOM");
-            }
-        } catch (e) {
-            scError("Error handling the like click command:", e);
-        }
-    }
-    if (msg.type === "follow-click-command") {
-        scLog("Received follow-click command in SC tab");
-        try {
-            if (badgeFollow) {
-                badgeFollow.click();
-                scLog("Follow button clicked");
-            } else {
-                scError("Follow button not found in DOM");
-            }
-        } catch (e) {
-            scError("Error handling the follow click command:", e);
-        }
-    }
-    if (msg.type === "queue-click-command") {
-        scLog("Received queue-click command in SC tab");
-        try {
-            if (badgeQueue) {
-                badgeQueue.click();
-                scLog("Queue button clicked");
-            } else {
-                scError("Queue button not found in DOM");
-            }
-        } catch (e) {
-            scError("Error handling the queue click command:", e);
+            scError(`Error handling ${msg.type}:`, e);
         }
     }
 
@@ -228,6 +151,46 @@ browser.runtime.onMessage.addListener((msg) => {
     }
 })
 
+
+// Helper for click commands
+function handleClickCommand({
+    selector, 
+    label, 
+    maxAttempts = 10,
+    intervalMs = 500,
+    customElement = null,
+    postClick = null
+}) {
+    scLog(`Looking for ${label}...`);
+    let attempts = 0;
+    
+    function simulateRealClick(el) {
+        const events = ["mousedown", "mouseup", "click"];
+        events.forEach(type => {
+            el.dispatchEvent(new MouseEvent(type, {
+                bubbles: true,
+                cancelable: true,
+                view: window
+            }));
+        });
+        scLog(`${label} fully clicked (${events.join(", ")})`);
+    }
+
+    function tryClick() {
+        const el = customElement || document.querySelector(selector);
+        if (el && el.offsetParent !== null) {
+            simulateRealClick(el);
+            if (postClick) {
+                setTimeout(postClick, 50);
+            }
+        } else if (++attempts <maxAttempts) {
+            setTimeout(tryClick, intervalMs);
+        } else {
+            scError(`${label} not found or not interactable after ${maxAttempts} attempts`);
+        }
+    }
+    tryClick();
+}
 // Helper to wait for Dynamic DOMS:
 function waitForElement(selector, callback) {
     const el = document.querySelector(selector);
