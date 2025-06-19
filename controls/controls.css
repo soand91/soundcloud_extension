@@ -1,4 +1,6 @@
 .controller {
+    font-family: "Inter";
+    font-weight: 600;
     position: fixed;
     bottom: 0;
     left: 0;
@@ -36,7 +38,7 @@
     width: 480px;
     opacity: 0;
     height: 530px;
-    max-height: calc(100vh-80px);
+    max-height: calc(100vh - 80px);
 }
 .controller_elements {
     display: flex;
@@ -74,7 +76,7 @@
     margin-left: 12px;
 }
 .shuffle.active {
-    color: orange;
+    color: #f50;;
 }
 .repeat {
      width: 24px; height: 24px;
@@ -89,14 +91,14 @@
     transition: color 0.2s;
 }
 .repeat.one, .repeat.all {
-    color: orange;
+    color: #f50;
 }
 .repeat.one.control_buttons:hover, .repeat.all.control_buttons:hover {
-    color: orange;
+    color: #f50;
 }
 .repeat.off .icon02, .repeat.all .icon02 { display: flex; }
 .repeat.one .icon1 {
-      display: flex;
+    display: flex;
 }
 .svg-wrap {
     width: 24px; height: 24px;
@@ -165,4 +167,188 @@
 }
 .ext-icon.ext-shown {
     opacity: 1; pointer-events: auto;
+}
+
+/* TIMELINE STARTS HERE */
+.timeline {
+    margin-right: 8px; margin-left: 24px;
+    line-height: 46px;
+    flex-grow: 1;
+}
+.timeline_wrapper {
+    display: flex;
+}
+.timePassed {
+    display: block; 
+    min-width: 25px;
+}
+.timePassed span {
+    display: inline; text-align: right; 
+    font-size: 0.85714em; font-weight: 600;
+}
+.timeDuration {
+    min-width: 30px;
+}
+.timeDuration span {
+    display: inline; text-align: left;
+    font-size: 0.85714em; font-weight: 600;
+}
+.timeDuration .time_hidden {
+    display: none;
+}
+
+.timeProgress {
+    position: relative; align-self: center;
+    margin: 0 8px; padding: 12px 0;
+    flex-grow: 1;
+}
+.progressBackground {
+    position: absolute;
+    width: 521.3px; height: 2px;
+    background-color: rgba(255, 255, 255, 0.15);
+}
+.progressBar {
+    position: absolute;
+    height: 2px;
+    background-color: #f50;
+}
+.progressHandle {
+    position: absolute; box-sizing: border-box;
+    margin-top: -3px; margin-left: -4px;
+    width: 8px; height: 8px;
+    border: 1.5px solid #f50; border-radius: 100%;
+    background-color: #fff;
+
+    opacity: 0; transition: opacity 0.15s;
+}
+.timeProgress:hover {
+    cursor: pointer;
+    .progressHandle {
+        opacity: 1;
+    }
+}
+
+/* VOLUME STARTS HERE */
+.volume {
+    position: relative; align-self: center;
+}
+.volume_button_wrapper {
+    width: 24px; height: 48px;
+}
+.volume_button {
+    margin: 0; padding: 16px 4px;
+    min-width: 24px; min-height: 24px;
+    border: none; cursor: pointer;
+    background-color: #303030; color: #fff;
+}
+.volume_button:hover {
+    color: rgba(255, 255, 255, 0.15);
+}
+.volume_slider {
+    position: absolute; cursor: pointer;
+    left: -9px; bottom: 50px;
+    width: 40px; height: 152px;
+    border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 4px;
+    overflow: initial; z-index: 2147483647; outline: 0;
+
+    transition: height 0.1s; transform: translateZ(0);
+}
+.volume_sliderBackground {
+    position: absolute; display: block;
+    margin-left: 18px;
+    left: 0; bottom: 13px;
+    width: 4px; height: 120px;
+    background-color: #303030;
+
+    opacity: 1; 
+    transition: opacity 0.1s linear; transition-delay: 0.1s;
+}
+.volume_sliderProgress {
+    position: absolute; 
+    margin-left: 18px;
+    bottom: 13px;
+    width: 4px; 
+    background-color: #fff;
+
+    opacity: 1;
+    transition: opacity 0.1s linear; transition-delay: 0.1s;
+}
+.volume_sliderHandle {
+    position: absolute; display: block;
+    margin-left: 12px; box-sizing: border-box;
+    width: 16px; height: 16px;
+    border: 1.5px solid #fff; border-radius: 100%;
+    background-color: #303030;
+
+    opacity: 1;
+    transition: opacity 0.1s linear; transition-delay: 0.1s;
+}
+
+/* SOUNDBADGE STARTS HERE */
+.soundBadge {
+    display: flex; align-items: center;
+    margin-left: 24px; box-sizing: border-box;
+    width: 328px; height: 48px;
+}
+.soundBadge_avatar {
+    position: relative; display: block;
+    margin-right: 16px; cursor: pointer;
+    width: 32px; height: 32px;
+    background-color: #fff;
+    flex-shrink: 0;
+}
+.soundBadge_title_container {
+    margin-right: 24px;
+    flex-grow: 1;
+    font-size: 14px; line-height: 1.5em;
+    overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; word-break: keep-all;
+}
+.artistLink {
+    display: flex; align-items: center;
+    width: 100%; height: 17px;
+    color: #999; cursor: pointer;
+    font-weight: 600; font-size: 0.85714em;
+    line-height: 16px;
+}
+.titleLink {
+    display: flex; align-items: center;
+    min-width: 0; width: 100%; height: 17px;
+    color: #fff; cursor: pointer;
+    white-space: nowrap;
+    font-weight: 600; font-size: 0.85714em;
+    line-height: 16px;
+}
+.titleLink:hover {
+    color: #999;
+    animation: scroll-left 8s linear infinite;
+}
+@keyframes scroll-left {
+    0% { transform: translate(0%); }
+    100% { transform: translate(-100%); }
+}
+.artistLink:hover {
+    color: rgba(255, 255, 255, 0.15);
+}
+.soundBadge_buttons_container {
+    display: flex;
+}
+.soundBadge_like, .soundBadge_follow, .soundBadge_queue {
+    position: relative; box-sizing: border-box;
+    display: inline-flex; align-items: center;
+    justify-content: center; cursor: pointer;
+    margin-right: 8px; padding: 6px 12px;
+    min-width: 16px; min-height: 16px;
+    background-color: transparent; color: #fff;
+    border: none;
+}
+.soundBadge_like svg, .soundBadge_follow svg, .soundBadge_queue svg {
+    width: 16px; height: 16px;
+}
+.soundBadge_like:hover, .soundBadge_follow:hover, .soundBadge_queue:hover {
+    color: rgba(255, 255, 255, 0.15);
+}
+.soundBadge_queue {
+    margin-right: 0; padding: 4px 0;
+    padding-left: 8px;
 }

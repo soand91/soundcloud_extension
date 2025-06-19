@@ -88,7 +88,7 @@ async function migrateSettingsIfNeeded(previousVersion) {
     // Optional: Compare old version to new and migrate storage format if needed
     const current = await browser.storage.local.get(SETTINGS_KEYS);
     const migrated = { ...DEFAULT_SETTINGS, ...current };
-    await browser.storage.loca.set(migrated);
+    await browser.storage.local.set(migrated);
     bgLog(`[Migration] Migrated settings from version ${previousVersion} to merge settings:`, migrated)
 }
 // Helper that ensures Settings object is populated and usable

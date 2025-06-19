@@ -31,12 +31,32 @@ window.addEventListener('DOMContentLoaded', async () => { //! May have to remove
 
 /// ======== Shadow DOM Injection ========
 async function injectToolbar() {
+
     log("Injecting toolbar Shadow DOM...");
     // 1. Create host and shadow root
     const host = document.createElement('div');
     host.id = "soundcloud-toolbar-host";
     document.body.appendChild(host);
     const shadow = host.attachShadow({ mode: 'open' });
+
+    // 1. Fetch the font as a Blob
+    const fontBlob = await fetch(browser.runtime.getURL('controls/Inter-SemiBold.woff'))
+        .then(r => r.blob());
+    // 2. Create a Blob URL
+    const fontUrl = URL.createObjectURL(fontBlob);
+    // 3. Inject with FontFace API (bypasses Firefox's restrictions)
+    const fontFace = new FontFace('Inter', `url(${fontUrl})`, {
+        weight: 600,
+        style: 'normal',
+        display: 'swap'
+    });
+    // 4. Force-load and apply
+    await fontFace.load();
+    document.fonts.add(fontFace);
+    // 5. Apply to all Shadow DOM elements
+    Array.from(shadow.querySelectorAll('*')).forEach(el => {
+        el.style.setProperty('font-family', '"Inter", sans-serif', 'important');
+    });
 
     // 2. Load HTML and CSS
     const [htmlText, cssText] = await Promise.all([

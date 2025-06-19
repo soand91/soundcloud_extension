@@ -34,7 +34,7 @@
         "<all_urls>", "*://soundcloud.com/*"
     ],
     "web_accessible_resources": [{
-        "resources": ["controls/controls.html", "controls/controls.css", "content/soundcloud-controls.js", "lib/settings.js"],
+        "resources": ["controls/controls.html", "controls/controls.css", "content/soundcloud-controls.js", "controls/Inter-SemiBold.woff"],
         "matches": ["<all_urls>"]
     }]
 }

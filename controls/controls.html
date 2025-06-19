@@ -50,7 +50,73 @@
                         </svg>
                     </div>
                 </button>
-                <button class="collapse-btn control_buttons">
+
+                <div class="timeline">
+                    <div class="timeline_wrapper">
+                        <div class="timePassed">
+                            <span id="current_time">0:21</span>
+                        </div>
+                        <div class="timeProgress">
+                            <div class="progressBackground"></div>
+                            <div class="progressBar" style="min-width: 1px; width: 11.3766%;"></div>
+                            <div class="progressHandle" style="left: 11.3766%;"></div>
+                        </div>
+                        <div class="timeDuration">
+                            <span id="duration_left" class="time_hidden duration_timer">-2:43</span>
+                            <span id="duration_total" class="duration_timer">3:04</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="volume">
+                    <div class="volume_button_wrapper">
+                        <button class="volume_button">
+                            <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                <path d="M7.14645 1.85356C7.46143 1.53858 8 1.76167 8 2.20712V13.7929C8 14.2384 7.46143 14.4614 7.14645 14.1465L4 11H1.5C1.22386 11 1 10.7762 1 10.5V5.50001C1 5.22387 1.22386 5.00001 1.5 5.00001H4L7.14645 1.85356Z" fill="currentColor"></path>
+                                <path d="M12 7.99999C12 9.48649 10.9189 10.7205 9.5 10.9585V5.04147C10.9189 5.27951 12 6.5135 12 7.99999Z" fill="currentColor"></path>
+                            </svg>  
+                        </button>
+                    </div>
+                    <div class="volume_slider">
+                        <div class="volume_sliderBackground"></div>
+                        <div class="volume_sliderProgress" style="height: 13.2px;"></div>
+                        <div class="volume_sliderHandle" style="top: 116.8px;"></div>
+                    </div>
+                </div>
+
+                <div class="soundBadge">
+                    <div class="soundBadge_avatar">
+                        <!--TODO ADD IMAGE-->
+                    </div>
+                    <div class="soundBadge_title_container">
+                        <div class="artistLink">10cust</div>
+                        <div class="titleLink">gracie abrams - thats so true (10cust remix)</div>
+                    </div>
+                    <div class="soundBadge_buttons_container">
+                        <button class="soundBadge_like">
+                            <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                <path d="M7.978 5c.653-1.334 1.644-2 2.972-2 1.992 0 3.405 1.657 2.971 4-.289 1.561-2.27 3.895-5.943 7C4.19 10.895 2.21 8.561 2.035 7c-.26-2.343.947-4 2.972-4 1.35 0 2.34.666 2.971 2z" fill="currentColor"></path>
+                            </svg>
+                        </button>
+                        <button class="soundBadge_follow">
+                            <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                <path d="M10 4.5C10 6.15685 8.65685 7.5 7 7.5C5.34315 7.5 4 6.15685 4 4.5C4 2.84315 5.34315 1.5 7 1.5C8.65685 1.5 10 2.84315 10 4.5Z" fill="currentColor"></path>
+                                <path d="M6.99998 8.5C1.98432 8.5 1.03552 10.0048 1.00098 14.248C0.999861 14.3861 1.11191 14.5 1.24998 14.5H12.75C12.8881 14.5 13.0001 14.3861 12.999 14.248C12.9646 9.987 12.016 8.5 6.99998 8.5Z" fill="currentColor"></path>
+                                <path d="M14.4697 4.46967L12.5 6.43934L11.5303 5.46967L10.4697 6.53033L12.5 8.56066L15.5303 5.53033L14.4697 4.46967Z" fill="currentColor"></path>
+                            </svg>
+                        </button>
+                        <button class="soundBadge_queue">
+                            <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                <path d="M4.3216 4.42401C4.63494 4.22818 4.63494 3.77185 4.3216 3.57601L1.765 1.97814C1.43198 1.77 1 2.00942 1 2.40214V5.59789C1 5.99061 1.43198 6.23003 1.765 6.02189L4.3216 4.42401Z" fill="currentColor"></path>
+                                <path d="M7 4.75H15V3.25H7V4.75Z" fill="currentColor"></path>
+                                <path d="M1 9.875H15V8.375H1V9.875Z" fill="currentColor"></path>
+                                <path d="M15 15H1V13.5H15V15Z" fill="currentColor"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- <button class="collapse-btn control_buttons">
                     <div class="svg-wrap2">
                         <svg width="24" height="24" viewBox="0 0 330 330" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
                             <path d="M111.213,165.004L250.607,25.607c5.858-5.858,5.858-15.355,0-21.213c-5.858-5.858-15.355-5.858-21.213,0.001l-150,150.004
@@ -58,7 +124,7 @@
                 C232.322,328.536,236.161,330,240,330s7.678-1.464,10.607-4.394c5.858-5.858,5.858-15.355,0-21.213L111.213,165.004z"/>
                         </svg>
                     </div>
-                </button>
+                </button> -->
             </div>
         </div>
     </section>
