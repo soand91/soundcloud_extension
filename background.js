@@ -382,7 +382,7 @@ async function handleRuntimeMessage(msg, sender) {
         case "skip-prev-request":
             ensureSoundCloudTabId(tabId => {
                 if (tabId === null) {
-                    bgLog("No SoundCloud tab found");
+                    bgLog("[Skip Prev request] No SoundCloud tab found");
                     return;
                 }
                 browser.tabs.sendMessage(tabId, { type: "skip-prev-command" })
@@ -393,7 +393,7 @@ async function handleRuntimeMessage(msg, sender) {
         case "skip-next-request":
             ensureSoundCloudTabId(tabId => {
                 if (tabId === null) {
-                    bgLog("No SoundCloud tab found");
+                    bgLog("[Skip Next request] No SoundCloud tab found");
                     return;
                 }
                 browser.tabs.sendMessage(tabId, { type: "skip-next-command" })
@@ -401,6 +401,83 @@ async function handleRuntimeMessage(msg, sender) {
                     .catch(err => bgError("Failed to send skip-next", err));
             });
             return true;
+        case "timeBtn-click-request":
+            ensureSoundCloudTabId(tabId => {
+                if (tabId === null) {
+                    bgLog("[Time Button request] No SoundCloud tab found");
+                    return;
+                }
+                browser.tabs.sendMessage(tabId, { type: "time-btn-command" })
+                    .then(() => bgLog("Time-btn command sent"))
+                    .catch(err => bgError("Failed to send time-btn", err));
+            });
+            return true;            
+        case "avatar-click-request":
+            ensureSoundCloudTabId(tabId => {
+                if (tabId === null) {
+                    bgLog("[Avatar Click request] No SoundCloud tab found");
+                    return;
+                }
+                browser.tabs.sendMessage(tabId, { type: "avatar-click-command" })
+                    .then(() => bgLog("Avatar click command sent"))
+                    .catch(err => bgError("Failed to send avatar click", err));
+            })
+            return true;
+        case "artist-click-request":
+            ensureSoundCloudTabId(tabId => {
+                if (tabId === null) {
+                    bgLog("[Artist Click request] No SoundCloud tab found");
+                    return;
+                }
+                browser.tabs.sendMessage(tabId, { type: "artist-click-command" })
+                    .then(() => bgLog("Artist click command sent"))
+                    .catch(err => bgError("Failed to send artist click", err));
+            })
+            return true;    
+        case "title-click-request":
+            ensureSoundCloudTabId(tabId => {
+                if (tabId === null) {
+                    bgLog("[Title Click request] No SoundCloud tab found");
+                    return;
+                }
+                browser.tabs.sendMessage(tabId, { type: "title-click-command" })
+                    .then(() => bgLog("Title click command sent"))
+                    .catch(err => bgError("Failed to send title click", err));
+            })
+            return true;              
+        case "like-request":
+            ensureSoundCloudTabId(tabId => {
+                if (tabId === null) {
+                    bgLog("[Like Click request] No SoundCloud tab found");
+                    return;
+                }
+                browser.tabs.sendMessage(tabId, { type: "like-click-command" })
+                    .then(() => bgLog("Like click command sent"))
+                    .catch(err => bgError("Failed to send like click", err));
+            })
+            return true;
+        case "follow-request":
+            ensureSoundCloudTabId(tabId => {
+                if (tabId === null) {
+                    bgLog("[Follow Click request] No SoundCloud tab found");
+                    return;
+                }
+                browser.tabs.sendMessage(tabId, { type: "follow-click-command" })
+                    .then(() => bgLog("Follow click command sent"))
+                    .catch(err => bgError("Failed to send follow click", err));
+            })
+            return true;
+        case "queue-request":
+            ensureSoundCloudTabId(tabId => {
+                if (tabId === null) {
+                    bgLog("[Queue Click request] No SoundCloud tab found");
+                    return;
+                }
+                browser.tabs.sendMessage(tabId, { type: "queue-click-command" })
+                    .then(() => bgLog("Queue click command sent"))
+                    .catch(err => bgError("Failed to send queue click", err));
+            })
+            return true;                        
         case "playpause-state-updated":
             playpauseState = msg.state;
             broadcastStateToContentTabs("playpause-state-changed", playpauseState);

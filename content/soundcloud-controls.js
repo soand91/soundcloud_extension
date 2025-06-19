@@ -1,10 +1,29 @@
-console.log("SoundCloud Controls script loaded!");
-// Selectors
+/// ======== Constants and State ========
 const playBtn = document.querySelector('.playControl');
 const shuffleState = document.querySelector('.shuffleControl');
 const repeatState = document.querySelector('.repeatControl');
 const prevBtn = document.querySelector('.skipControl__previous');
 const nextBtn = document.querySelector('.skipControl__next');
+
+const timeBtn = document.querySelector('.playbackTimeline__duration');
+const badgeArtist = document.querySelector('.playbackSoundBadge__lightLink')
+const badgeTitle = document.querySelector('.playbackSoundBadge__titleLink');
+const badgeLike = document.querySelector('.playbackSoundBadge__like');
+const badgeFollow = document.querySelector('.playbackSoundBadge__follow');
+const badgeQueue = document.querySelector('.playbackSoundBadge__showQueue');
+
+const DEBUG = true;
+function scLog(...args) {
+  if (DEBUG) console.log("[SC Controls]", ...args);
+}
+function scWarn(...args) {
+  if (DEBUG) console.warn("[SC Controls]", ...args);
+}
+function scError(...args) {
+  console.error("[SC Controls]", ...args); // always log errors
+}
+
+scLog("Script loaded on:", location.href);
 
 // Helpers: state-readers
 function getPlayPauseStateFromDOM() {
@@ -28,13 +47,13 @@ function getAllStatesFromDOM() {
 
 // Command handlers
 browser.runtime.onMessage.addListener((msg) => {
-    console.log("SC Controls: Received message", msg);
+    scLog("SC Controls: Received message", msg);
     if (msg.type === "playpause-toggle-command") {
-        console.log("Received playpause-toggle-command in SC tab");
+        scLog("Received playpause-toggle-command in SC tab");
         try {
             if (playBtn) {
                 playBtn.click();
-                console.log("Play button clicked");
+                scLog("Play button clicked");
                 setTimeout(() => {
                     const currentState = getPlayPauseStateFromDOM();
                     browser.runtime.sendMessage({
@@ -43,18 +62,18 @@ browser.runtime.onMessage.addListener((msg) => {
                     });
                 }, 50);
             } else {
-                console.error("Play button not found in DOM");
+                scError("Play button not found in DOM");
             }
         } catch (e) {
-            console.error("Error handling playpause command:", e);
+            scError("Error handling playpause command:", e);
         }
     }
     if (msg.type === "shuffle-toggle-command") {
-        console.log("Received shuffle-toggle-command in SC tab");
+        scLog("Received shuffle-toggle-command in SC tab");
         try {
             if (shuffleState) {
                 shuffleState.click();
-                console.log("Shuffle button clicked");
+                scLog("Shuffle button clicked");
                 setTimeout(() => {
                     const currentState = getShuffleStateFromDOM();
                     browser.runtime.sendMessage({
@@ -63,10 +82,10 @@ browser.runtime.onMessage.addListener((msg) => {
                     });
                 }, 50);
             } else {
-                console.error("Shuffle button not found in DOM");
+                scError("Shuffle button not found in DOM");
             }
         } catch (e) {
-            console.error("Error handling shuffle command", e);
+            scError("Error handling shuffle command", e);
         }
     }
     if (msg.type === "repeat-toggle-command") {
@@ -87,31 +106,123 @@ browser.runtime.onMessage.addListener((msg) => {
         })
     }
     if (msg.type === "skip-prev-command") {
-        console.log("Received skip-prev command in SC tab");
+        scLog("Received skip-prev command in SC tab");
         try {
             if (prevBtn) {
                 prevBtn.click();
-                console.log("Skip prev button clicked");
+                scLog("Skip prev button clicked");
             } else {
-                console.error("Skip prev button not found in DOM");
+                scError("Skip prev button not found in DOM");
             }
         } catch (e) {
-            console.error("Error handling the skip-prev command:", e);
+            scError("Error handling the skip-prev command:", e);
         }
     }
     if (msg.type === "skip-next-command") {
-        console.log("Received skip-next command in SC tab");
+        scLog("Received skip-next command in SC tab");
         try {
             if (nextBtn) {
                 nextBtn.click();
-                console.log("Skip next button clicked");
+                scLog("Skip next button clicked");
             } else {
-                console.error("Skip next button not found in DOM");
+                scError("Skip next button not found in DOM");
             }
         } catch (e) {
-            console.error("Error handling the skip-next command:", e);
+            scError("Error handling the skip-next command:", e);
         }
     }
+    if (msg.type === "time-btn-command") {
+        scLog("Received time-btn command in SC tab");
+        try {
+            if (timeBtn) {
+                timeBtn.click();
+                scLog("Time button clicked");
+            } else {
+                scError("Time button not found in DOM");
+            }
+        } catch (e) {
+            scError("Error handling the time-btn command:", e);
+        }
+    }        
+    if (msg.type === "avatar-click-command") {
+        scLog("Received avatar-click command in SC tab");
+        try {
+            if (badgeTitle) {
+                badgeTitle.click();
+                scLog("Avatar clicked");
+            } else {
+                scError("Avatar not found in DOM");
+            }
+        } catch (e) {
+            scError("Error handling the avatar click command:", e);
+        }
+    }
+    if (msg.type === "artist-click-command") {
+        scLog("Received artist-click command in SC tab");
+        try {
+            if (badgeArtist) {
+                badgeArtist.click();
+                scLog("Artist link clicked");
+            } else {
+                scError("Artist link not found in DOM");
+            }
+        } catch (e) {
+            scError("Error handling the artist click command:", e);
+        }
+    }
+    if (msg.type === "title-click-command") {
+        scLog("Received title-click command in SC tab");
+        try {
+            if (badgeTitle) {
+                badgeTitle.click();
+                scLog("Title link clicked");
+            } else {
+                scError("Title link not found in DOM");
+            }
+        } catch (e) {
+            scError("Error handling the title click command:", e);
+        }
+    }
+    if (msg.type === "like-click-command") {
+        scLog("Received like-click command in SC tab");
+        try {
+            if (badgeLike) {
+                badgeLike.click();
+                scLog("Like button clicked");
+            } else {
+                scError("Like button not found in DOM");
+            }
+        } catch (e) {
+            scError("Error handling the like click command:", e);
+        }
+    }
+    if (msg.type === "follow-click-command") {
+        scLog("Received follow-click command in SC tab");
+        try {
+            if (badgeFollow) {
+                badgeFollow.click();
+                scLog("Follow button clicked");
+            } else {
+                scError("Follow button not found in DOM");
+            }
+        } catch (e) {
+            scError("Error handling the follow click command:", e);
+        }
+    }
+    if (msg.type === "queue-click-command") {
+        scLog("Received queue-click command in SC tab");
+        try {
+            if (badgeQueue) {
+                badgeQueue.click();
+                scLog("Queue button clicked");
+            } else {
+                scError("Queue button not found in DOM");
+            }
+        } catch (e) {
+            scError("Error handling the queue click command:", e);
+        }
+    }
+
     if (msg.type === "get-all-states") {
         return Promise.resolve(getAllStatesFromDOM());
     }

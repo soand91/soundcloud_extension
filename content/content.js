@@ -203,6 +203,13 @@ function setupButtonListeners(root) {
     const skipNextBtn   = root.querySelector('.skip_next');
     const close_btn     = root.querySelector('.collapse-btn');
     const open_icon     = root.querySelector('.ext-icon');
+    const timeBtn = root.querySelector('.timeDuration');
+    const badgeAvatar = root.querySelector('.soundBadge_avatar');
+    const badgeArtist = root.querySelector('.artistLink')
+    const badgeTitle = root.querySelector('.titleLink');
+    const badgeLike = root.querySelector('.soundBadge_like');
+    const badgeFollow = root.querySelector('.soundBadge_follow');
+    const badgeQueue = root.querySelector('.soundBadge_queue');
 
     async function sendSimpleRequest(type, maxRetries = 3) {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -222,6 +229,14 @@ function setupButtonListeners(root) {
     if (shuffle) {shuffle.addEventListener('click', () => sendSimpleRequest('shuffle-toggle-request'))};
     if (skipPrevBtn) {skipPrevBtn.addEventListener('click', () => sendSimpleRequest('skip-prev-request'))};
     if (skipNextBtn) {skipNextBtn.addEventListener('click', () => sendSimpleRequest('skip-next-request'))};
+    if (timeBtn) {timeBtn.addEventListener('click', () => sendSimpleRequest('timeBtn-click-request'))}
+    if (badgeAvatar) {badgeAvatar.addEventListener('click', () => sendSimpleRequest('avatar-click-request'))};
+    if (badgeArtist) {badgeArtist.addEventListener('click', () => sendSimpleRequest('artist-click-request'))};
+    if (badgeTitle)  {badgeTitle.addEventListener('click', () => sendSimpleRequest('title-click-request'))};
+    if (badgeLike)   {badgeLike.addEventListener('click', () => sendSimpleRequest('like-request'))};
+    if (badgeFollow) {badgeFollow.addEventListener('click', () => sendSimpleRequest('follow-request'))};
+    if (badgeQueue)  {badgeQueue.addEventListener('click', () => sendSimpleRequest('queue-request'))};
+
     if (repeat) {
         repeat.addEventListener('click', async () => {
             const states = ['off', 'one', 'all'];
