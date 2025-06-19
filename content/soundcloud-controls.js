@@ -37,11 +37,35 @@ function getRepeatStateFromDOM() {
     if (repeatState.classList.contains('m-all')) return 'all';
     return 'off'
 }
+function getTimeDisplayStateFromDOM() { //TODO SPAN DETECTOR
+    return timeBtn.classList.contains('') ? "" : "";
+}
+function getLikeStateFromDOM() {
+    const title = badgeLike?.getAttribute("title") || "";
+    if (title.includes("Unlike")) return "liked";
+    if (title.includes("Like")) return "unliked";
+    return "unknown"
+}
+function getFollowStateFromDOM() {
+    const title = badgeFollow?.getAttribute("title") || "";
+    if (title.includes("Unfollow")) return "followed";
+    if (title.includes("Follow")) return "unfollowed";
+    return "unknown"
+}
+function getQueueStateFromDOM() { //TODO
+    const title = badgeQueue?.getAttribute("title") || "";
+    if (title.includes("")) return "";
+    if (title.includes("")) return "";
+    return "unknown"
+}
+
 function getAllStatesFromDOM() {
     return {
         playPause: getPlayPauseStateFromDOM(),
         shuffle: getShuffleStateFromDOM(),
-        repeat: getRepeatStateFromDOM()
+        repeat: getRepeatStateFromDOM(),
+        like: getLikeStateFromDOM(),
+        follow: getFollowStateFromDOM()
     };
 }
 
@@ -71,7 +95,7 @@ const clickCommandMap = {
     "repeat-toggle-command": {
         label: "Repeat button",
         getElement: () => repeatState,
-        postClick: () => {
+        postClick: (msg) => {
             const desiredState = msg.state; // "off", "one", or "all"
             const states = ['off', 'one', 'all'];
             let currentState = getRepeatStateFromDOM();
@@ -97,9 +121,16 @@ const clickCommandMap = {
         label: "Skip next button",
         getElement: () => nextBtn
     },
-    "time-btn-command": {
+    "time-btn-command": { //TODO
         label: "Time display button",
-        getElement: () => timeBtn
+        getElement: () => timeBtn,
+        postClick: () => {
+            const currentState = getTimeDisplayStateFromDOM();
+            browser.runtime.sendMessage({
+                type: "time-btn-state-updated",
+                state: currentState
+            });
+        }
     },
     "avatar-click-command": {
         label: "Artist portrait link",
@@ -115,21 +146,43 @@ const clickCommandMap = {
     },
     "like-click-command": {
         label: "Like button",
-        getElement: () => badgeLike
+        getElement: () => badgeLike,
+        postClick: () => {
+            const currentState = getLikeStateFromDOM();
+            browser.runtime.sendMessage({
+                type: "like-state-updated",
+                state: currentState
+            });
+        }
     },
     "follow-click-command": {
         label: "Follow button", 
-        getElement: () => badgeFollow
+        getElement: () => badgeFollow,
+        postClick: () => {
+            const currentState = getFollowStateFromDOM();
+            browser.runtime.sendMessage({
+                type: "follow-state-updated",
+                state: currentState
+            });
+        }
     },
-    "queue-click-command": {
+    "queue-click-command": { //TODO
         label: "Queue button",
-        getElement: () => badgeQueue
+        getElement: () => badgeQueue,
+        postClick: () => {
+            const currentState = getQueueStateFromDOM();
+            browser.runtime.sendMessage({
+                type: "queue-state-updated",
+                state: currentState
+            });
+        }
     }
 }
 
 // Command handlers
 browser.runtime.onMessage.addListener((msg) => {
     scLog("SC Controls: Received message", msg);
+
     // Dry centralized handler
     if (msg.type in clickCommandMap) {
         const config = clickCommandMap[msg.type];
@@ -139,7 +192,8 @@ browser.runtime.onMessage.addListener((msg) => {
                 label: config.label,
                 customElement: config.getElement?.(),
                 selector: config.selector,
-                postClick: config.postClick
+                postClick: config.postClick,
+                msg
             });
         } catch (e) {
             scError(`Error handling ${msg.type}:`, e);
@@ -159,7 +213,8 @@ function handleClickCommand({
     maxAttempts = 10,
     intervalMs = 500,
     customElement = null,
-    postClick = null
+    postClick = null,
+    msg = null // pass full message through
 }) {
     scLog(`Looking for ${label}...`);
     let attempts = 0;
@@ -181,9 +236,9 @@ function handleClickCommand({
         if (el && el.offsetParent !== null) {
             simulateRealClick(el);
             if (postClick) {
-                setTimeout(postClick, 50);
+                setTimeout(() => postClick(msg), 50); // passes message here
             }
-        } else if (++attempts <maxAttempts) {
+        } else if (++attempts < maxAttempts) {
             setTimeout(tryClick, intervalMs);
         } else {
             scError(`${label} not found or not interactable after ${maxAttempts} attempts`);
@@ -218,4 +273,6 @@ function setupObserver(selector, type, getStateFn) {
 setupObserver('.playControl', "playpause", getPlayPauseStateFromDOM);
 setupObserver('.shuffleControl', "shuffle", getShuffleStateFromDOM);
 setupObserver('.repeatControl', "repeat", getRepeatStateFromDOM);
+setupObserver('.playbackSoundBadge__like', "like", getLikeStateFromDOM);
+setupObserver('.playbackSoundBadge__follow', "follow", getFollowStateFromDOM);
 

@@ -4,6 +4,8 @@ let activeSoundCloudTabId = null;
 let playpauseState = "paused";
 let repeatState = "off";
 let shuffleState = "inactive";
+let likeState = 'unliked';
+let followState = 'unfollowed';
 const DEFAULT_SETTINGS = {
     'start-open-toggle': false,
     'active-tab-toggle': false,
@@ -353,8 +355,8 @@ async function handleRuntimeMessage(msg, sender) {
                     return;
                 }
                 browser.tabs.sendMessage(tabId, { type: "playpause-toggle-command" })
-                    .then(() => bgLog("Playpause command sent"))
-                    .catch(err => bgError("Failed to send playpause:", err));
+                    .then(() => bgLog("[Playpause request] Playpause command sent"))
+                    .catch(err => bgError("[Playpause request] Failed to send playpause:", err));
             });
             return true;
         case "shuffle-toggle-request":
@@ -364,19 +366,26 @@ async function handleRuntimeMessage(msg, sender) {
                     return;
                 }
                 browser.tabs.sendMessage(tabId, { type: "shuffle-toggle-command" })
-                    .then(() => bgLog("Shuffle command sent"))
-                    .catch(err => bgError("Failed to send playpause:", err));
+                    .then(() => bgLog("[Shuffle request] Shuffle command sent"))
+                    .catch(err => bgError("[Shuffle request] Failed to send playpause:", err));
             });
             return true;
         case "repeat-toggle-request":
             ensureSoundCloudTabId(tabId => {
                 if (tabId === null) {
                     bgLog("[Repeat request] No SoundCloud tab found");
+                    sendResponse({ success: false });
                     return;
                 }
                 browser.tabs.sendMessage(tabId, { type: "repeat-toggle-command", state: msg.state })
-                    .then(() => bgLog("Repeat command sent"))
-                    .catch(err => bgError("Failed to send playpause:", err));
+                    .then(() => {
+                        bgLog("[Repeat request] Repeat command sent");
+                        sendResponse({ success: true });
+                    })
+                    .catch(err => {
+                        bgError("[Repeat request] Failed to send playpause:", err);
+                        sendResponse({ success: false });
+                    });
             })
             return true;
         case "skip-prev-request":
@@ -386,8 +395,8 @@ async function handleRuntimeMessage(msg, sender) {
                     return;
                 }
                 browser.tabs.sendMessage(tabId, { type: "skip-prev-command" })
-                    .then(() => bgLog("Skip-prev command sent"))
-                    .catch(err => bgError("Failed to send skip-prev", err));
+                    .then(() => bgLog("[Skip Prev request] Skip-prev command sent"))
+                    .catch(err => bgError("[Skip Prev request] Failed to send skip-prev", err));
             });
             return true;
         case "skip-next-request":
@@ -397,8 +406,8 @@ async function handleRuntimeMessage(msg, sender) {
                     return;
                 }
                 browser.tabs.sendMessage(tabId, { type: "skip-next-command" })
-                    .then(() => bgLog("Skip-next command sent"))
-                    .catch(err => bgError("Failed to send skip-next", err));
+                    .then(() => bgLog("[Skip Next request] Skip-next command sent"))
+                    .catch(err => bgError("[Skip Next request] Failed to send skip-next", err));
             });
             return true;
         case "timeBtn-click-request":
@@ -408,8 +417,8 @@ async function handleRuntimeMessage(msg, sender) {
                     return;
                 }
                 browser.tabs.sendMessage(tabId, { type: "time-btn-command" })
-                    .then(() => bgLog("Time-btn command sent"))
-                    .catch(err => bgError("Failed to send time-btn", err));
+                    .then(() => bgLog("[Time Button request] Time-btn command sent"))
+                    .catch(err => bgError("[Time Button request] Failed to send time-btn", err));
             });
             return true;            
         case "avatar-click-request":
@@ -419,8 +428,8 @@ async function handleRuntimeMessage(msg, sender) {
                     return;
                 }
                 browser.tabs.sendMessage(tabId, { type: "avatar-click-command" })
-                    .then(() => bgLog("Avatar click command sent"))
-                    .catch(err => bgError("Failed to send avatar click", err));
+                    .then(() => bgLog("[Avatar Click request] Avatar click command sent"))
+                    .catch(err => bgError("[Avatar Click request] Failed to send avatar click", err));
             })
             return true;
         case "artist-click-request":
@@ -430,8 +439,8 @@ async function handleRuntimeMessage(msg, sender) {
                     return;
                 }
                 browser.tabs.sendMessage(tabId, { type: "artist-click-command" })
-                    .then(() => bgLog("Artist click command sent"))
-                    .catch(err => bgError("Failed to send artist click", err));
+                    .then(() => bgLog("[Artist Click request] Artist click command sent"))
+                    .catch(err => bgError("[Artist Click request] Failed to send artist click", err));
             })
             return true;    
         case "title-click-request":
@@ -441,8 +450,8 @@ async function handleRuntimeMessage(msg, sender) {
                     return;
                 }
                 browser.tabs.sendMessage(tabId, { type: "title-click-command" })
-                    .then(() => bgLog("Title click command sent"))
-                    .catch(err => bgError("Failed to send title click", err));
+                    .then(() => bgLog("[Title Click request] Title click command sent"))
+                    .catch(err => bgError("[Title Click request] Failed to send title click", err));
             })
             return true;              
         case "like-request":
@@ -452,8 +461,8 @@ async function handleRuntimeMessage(msg, sender) {
                     return;
                 }
                 browser.tabs.sendMessage(tabId, { type: "like-click-command" })
-                    .then(() => bgLog("Like click command sent"))
-                    .catch(err => bgError("Failed to send like click", err));
+                    .then(() => bgLog("[Like Click request] Like click command sent"))
+                    .catch(err => bgError("[Like Click request] Failed to send like click", err));
             })
             return true;
         case "follow-request":
@@ -463,8 +472,8 @@ async function handleRuntimeMessage(msg, sender) {
                     return;
                 }
                 browser.tabs.sendMessage(tabId, { type: "follow-click-command" })
-                    .then(() => bgLog("Follow click command sent"))
-                    .catch(err => bgError("Failed to send follow click", err));
+                    .then(() => bgLog("[Follow Click request] Follow click command sent"))
+                    .catch(err => bgError("[Follow Click request] Failed to send follow click", err));
             })
             return true;
         case "queue-request":
@@ -474,8 +483,8 @@ async function handleRuntimeMessage(msg, sender) {
                     return;
                 }
                 browser.tabs.sendMessage(tabId, { type: "queue-click-command" })
-                    .then(() => bgLog("Queue click command sent"))
-                    .catch(err => bgError("Failed to send queue click", err));
+                    .then(() => bgLog("[Queue Click request] Queue click command sent"))
+                    .catch(err => bgError("[Queue Click request] Failed to send queue click", err));
             })
             return true;                        
         case "playpause-state-updated":
@@ -490,6 +499,18 @@ async function handleRuntimeMessage(msg, sender) {
             repeatState = msg.state;
             broadcastStateToContentTabs("repeat-state-changed", repeatState);
             return true;
+
+
+        case "like-state-updated":
+            likeState = msg.state;
+            broadcastStateToContentTabs("like-state-changed", likeState);
+            return true;
+        case "follow-state-updated":
+            followState = msg.state;
+            broadcastStateToContentTabs("follow-state-changed", followState);
+            return true;
+
+
         case "get-settings":
             const settings = await browser.storage.local.get(SETTINGS_KEYS);
             bgLog("[Background] Responding to get-settings with:", settings);
@@ -498,12 +519,16 @@ async function handleRuntimeMessage(msg, sender) {
             bgLog("[Background] Responding to get-all-states with:", {
                 playpause: playpauseState,
                 shuffle: shuffleState,
-                repeat: repeatState
+                repeat: repeatState,
+                like: likeState,
+                follow: followState
             });
             return {
                 playpause: playpauseState,
                 shuffle: shuffleState,
-                repeat: repeatState
+                repeat: repeatState,
+                like: likeState,
+                follow: followState
             };
 
         default:

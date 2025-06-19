@@ -76,7 +76,7 @@
     margin-left: 12px;
 }
 .shuffle.active {
-    color: #f50;;
+    color: #f50;
 }
 .repeat {
      width: 24px; height: 24px;
@@ -347,6 +347,9 @@
 }
 .soundBadge_like:hover, .soundBadge_follow:hover, .soundBadge_queue:hover {
     color: rgba(255, 255, 255, 0.15);
+}
+.soundBadge_like.liked, .soundBadge_follow.followed {
+    color: #f50;
 }
 .soundBadge_queue {
     margin-right: 0; padding: 4px 0;

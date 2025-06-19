@@ -117,12 +117,15 @@ async function syncAllStates() {
     log("Received states:", {
         playpause: response.playpause,
         shuffle: response.shuffle,
-        repeat: response.repeat
+        repeat: response.repeat,
+        like: response.like,
+        follow: response.follow
     });
     setPlayPauseButtonUI(response.playpause, shadowRoot);
     setShuffleButtonUI(response.shuffle, shadowRoot);
     setRepeatButtonUI(response.repeat, shadowRoot);
-    //! may have to include container states
+    setLikeUI(response.like, shadowRoot);
+    setFollowUI(response.follow, shadowRoot);
 }
 
 /// ======== Sync All Settings from [background.js] ========
@@ -159,6 +162,17 @@ function setRepeatButtonUI(state, root) {
     validStates.forEach(s => btn.classList.remove(s));
     if (validStates.includes(state)) btn.classList.add(state);
 }
+function setLikeUI(state, root) {
+    const btn = root.querySelector('.soundBadge_like');
+    if (!btn) return;
+    btn.classList.toggle('liked', state === 'liked');
+}
+function setFollowUI(state, root) {
+    const btn = root.querySelector('.soundBadge_follow');
+    if (!btn) return;
+    btn.classList.toggle('followed', state === 'followed');
+}
+
 function applySettingsToAllTabs(settings) {
     applyStartOpenSetting(!!settings['start-open-toggle']);
     applyActiveTabSetting(!!settings['active-tab-toggle']);
@@ -215,10 +229,10 @@ function setupButtonListeners(root) {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
                 const response = await browser.runtime.sendMessage({ type });
-                console.log(`${type} succeeded`, response);
+                log(`${type} succeeded`, response);
                 return response;
             } catch (error) {
-                console.warn(`Attempt ${attempt} failed for ${type}:`, error);
+                warn(`Attempt ${attempt} failed for ${type}:`, error);
                 if (attempt === maxRetries) throw error;
                 await new Promise(r => setTimeout(r, 300 * attempt));
             }
@@ -249,14 +263,14 @@ function setupButtonListeners(root) {
                     state: nextState
                 });
                 if (response && response.success) {
-                    console.log("repeat-toggle-request succeeded")
+                    log("repeat-toggle-request succeeded")
                     repeat.classList.remove(...states);
                     repeat.classList.add(nextState);
                 } else {
                     warn("repeat-toggle-request failed or was ignored.")
                 }
             } catch (err) {
-                console.error('Repeat toggle failed:', err);
+                error('Repeat toggle failed:', err);
             } 
         });
     }
@@ -274,6 +288,8 @@ function setupMessageListeners() {
         "playpause-state-changed": setPlayPauseButtonUI,
         "shuffle-state-changed": setShuffleButtonUI,
         "repeat-state-changed": setRepeatButtonUI,
+        "like-state-changed": setLikeUI,
+        "follow-state-changed": setFollowUI,
     };
     browser.runtime.onMessage.addListener((msg) => {
         log("Incoming message:", msg);
