@@ -62,7 +62,6 @@ function getQueueStateFromDOM() { //TODO
     if (title.includes("")) return "";
     return "unknown"
 }
-
 function getAllStatesFromDOM() {
     return {
         playPause: getPlayPauseStateFromDOM(),
@@ -73,6 +72,62 @@ function getAllStatesFromDOM() {
         follow: getFollowStateFromDOM()
     };
 }
+
+function getElapsedSeconds() { //! This returns seconds that is used to show time passed, calculate bar width and handle left via divide getElapsedSeconds / getDuration
+    const el = document.querySelector('.playbackTimeline__progressWrapper');
+    const val = el?.getAttribute('aria-valuenow');
+    return val ? Number(val) : null;
+}
+function getDuration() { //! This returns total song duration in seconds used to display duration or remaining
+    const el = document.querySelector('.playbackTimeline__duration span[aria-hidden="true"]');
+    if (!el) return null;
+    const text = el.textContent.trim();
+    const isRemaining = text.startsWith('-');
+    const seconds = parseTimeString(text.replace('-', ''));
+
+    if (isRemaining) {
+        const passed = getElapsedSeconds();
+        return (passed != null) ? passed + seconds : null;
+    }
+
+    return seconds;
+}
+function observeDurationChanges() {
+    const durationContainer = document.querySelector('.playbackTimeline__duration');
+    if (!durationContainer) return;
+    const observer = new MutationObserver(() => {
+        const duration = getDuration();
+        if (duration !== null) {
+            browser.runtime.sendMessage({
+                type: 'timeline-duration-state-updated', 
+                state: duration
+            });
+        }
+    });
+    observer.observe(durationContainer, { childList: true, subtree: true });
+    // Send initial snapshot
+    const initial = getDuration();
+    if (initial !== null) {
+        browser.runtime.sendMessage({
+            type: 'timeline-duration-state-updated',
+            state: initial
+        });
+    }
+}
+// Delay until DOM is ready
+waitForElement('.playbackTimeline__duration', observeDurationChanges);
+
+let lastSentSeconds = null;
+setInterval(() => {
+    const secondsElapsed = getElapsedSeconds();
+    if (secondsElapsed !== null && secondsElapsed !== lastSentSeconds) {
+        browser.runtime.sendMessage({
+            type: 'timeline-secondsElapsed-state-updated', 
+            state: secondsElapsed
+        });
+        lastSentSeconds = secondsElapsed;
+    }
+}, 500);
 
 const clickCommandMap = {
     "playpause-toggle-command": {
@@ -211,6 +266,15 @@ browser.runtime.onMessage.addListener((msg) => {
 })
 
 
+// Helper to convert strings _:__ to seconds number
+function parseTimeString(timeStr) {
+    const parts = timeStr.split(':').map(Number);
+    if (parts.length === 2) {
+        const [minutes, seconds] = parts;
+        return minutes * 60 + seconds;
+    }
+    return 0;
+}
 // Helper for click commands
 function handleClickCommand({
     selector, 

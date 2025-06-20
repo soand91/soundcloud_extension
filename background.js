@@ -7,6 +7,12 @@ let shuffleState = "inactive";
 let displayState = 'duration';
 let likeState = 'unliked';
 let followState = 'unfollowed';
+let timelineState = {
+    secondsElapsed: null,
+    duration: null
+};
+let lastBroadcastedTimelineStr = null;
+
 const DEFAULT_SETTINGS = {
     'start-open-toggle': false,
     'active-tab-toggle': false,
@@ -315,9 +321,47 @@ async function ensureSoundCloudTabId(callback) {
         callback(null);
     }
 }
+// Helper that formats time correctly
+function formatTime(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+}
+// Helper that parses timeline number and broadcasts
+let timelineBroadcastTimer = null;
+function maybeBroadcastTimeline(tabId) {
+    clearTimeout(timelineBroadcastTimer);
+    timelineBroadcastTimer = setTimeout(() => {
+        if (
+            timelineState.secondsElapsed == null || timelineState.duration == null
+        ) return; // Don't broadcast incomplete state
+        const percent = timelineState.duration > 0
+            ? (timelineState.secondsElapsed / timelineState.duration) * 100
+            : 0; // Math for establishing timelineBar percent
+        const timeline = {
+            tabId, 
+            secondsElapsed: timelineState.secondsElapsed,
+            duration: timelineState.duration,
+            percent,
+            timeFormatted: formatTime(timelineState.secondsElapsed),
+            durationFormatted: formatTime(timelineState.duration)
+        };
+        const str = JSON.stringify(timeline);
+        if (str !== lastBroadcastedTimelineStr) {
+            browser.runtime.sendMessage({
+                type: 'timeline-state-updated', 
+                state: timeline
+            });
+            bgLog("Updated timeline state:", timeline);
+            lastBroadcastedTimelineStr = str;
+        }
+    }, 100);
+}
 
 // Central message handler 
 async function handleRuntimeMessage(msg, sender) {
+    const tabId = sender?.tab?.id;
+    if (!tabId) return;
     switch (msg.type) {
         case "get-soundcloud-tabs": 
             if (!soundcloudTabs || !(soundcloudTabs instanceof Map)) {
@@ -505,6 +549,18 @@ async function handleRuntimeMessage(msg, sender) {
             displayState = msg.state;
             broadcastStateToContentTabs("time-display-changed", displayState);
             return true;
+        case "timeline-duration-state-updated":
+            timelineState.duration = msg.state;
+            maybeBroadcastTimeline(tabId);
+            bgLog("Received duration:", msg.state);
+            return true;
+        case "timeline-secondsElapsed-state-updated":
+            timelineState.secondsElapsed = msg.state;
+            maybeBroadcastTimeline(tabId);
+            bgLog("Received secondsElapsed:", msg.state);
+            return true;
+
+
         case "like-state-updated":
             likeState = msg.state;
             broadcastStateToContentTabs("like-state-changed", likeState);
