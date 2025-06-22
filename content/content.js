@@ -1,5 +1,10 @@
 /// ======== Constants and State ========
 const STATE_KEYS = ['play_pause', 'shuffle', 'repeat'];
+let isPlaying = false;
+let cachedElapsed = 0;
+let cachedDuration = 0;
+let lastUpdateTime = 0;
+let rafId = null;
 let shadowRoot = null;
 
 const DEBUG = true;
@@ -27,6 +32,7 @@ window.addEventListener('DOMContentLoaded', async () => { //! May have to remove
     setupButtonListeners(shadowRoot);               // 5. Setup button handlers
     setupMessageListeners();                        // 6. Handle incoming handlers
     log("Toolbar fully initialized.");
+    startInterpolatedTimelineLoop(shadowRoot);
 })
 
 /// ======== Shadow DOM Injection ========
@@ -107,26 +113,26 @@ function waitForButtons(root) {
 /// ======== Sync All States from [background.js] ========
 async function syncAllStates() {
     log("Requesting all UI states from background...");
-    const response = await browser.runtime.sendMessage({ type: "get-all-states" });
+    const response = await browser.runtime.sendMessage({ type: "get-all-states-active" });
+    const elapsed = response.secondsElapsed ?? 0;
+    const duration = response.duration ?? 0;
 
+    log("Full raw response from background:", response);
     if (!response) {
-        warn("No response from get-all-states");
+        warn("No response from get-all-states-active");
         return;
     }
-
-    log("Received states:", {
-        playpause: response.playpause,
-        shuffle: response.shuffle,
-        repeat: response.repeat,
-        time: response.time,
-        like: response.like,
-        follow: response.follow
-    });
     setPlayPauseButtonUI(response.playpause, shadowRoot);
     setShuffleButtonUI(response.shuffle, shadowRoot);
     setRepeatButtonUI(response.repeat, shadowRoot);
     setLikeUI(response.like, shadowRoot);
     setFollowUI(response.follow, shadowRoot);
+
+    setTitleUI(response.songTitle, shadowRoot);
+    setArtistUI(response.songArtist, shadowRoot);
+    setAvatarUI(response.avatar, shadowRoot);
+
+    setTimelineUI(elapsed, duration, shadowRoot);
 }
 
 /// ======== Sync All Settings from [background.js] ========
@@ -148,8 +154,13 @@ function setPlayPauseButtonUI(state, root) {
     const btn = root.querySelector('.play_pause');
     if (!btn) return;
     btn.classList.remove('playing', 'paused');
-    if (state === 'playing') btn.classList.add('playing');
-    else if (state === 'paused') btn.classList.add('paused');
+    if (state === 'playing') {
+        isPlaying = true;
+        btn.classList.add('playing');
+    } else if (state === 'paused') {
+        isPlaying = false;
+        btn.classList.add('paused')
+    };
 }
 function setShuffleButtonUI(state, root) {
     const btn = root.querySelector('.shuffle');
@@ -187,7 +198,78 @@ function setFollowUI(state, root) {
     if (!btn) return;
     btn.classList.toggle('followed', state === 'followed');
 }
+function setTitleUI(state, root) {
+    const container = root.querySelector('.titleLink');
+    if (!container) return;
+    container.innerHTML = state ?? '';
+}
+function setArtistUI(state, root) {
+    const container = root.querySelector('.artistLink');
+    if (!container) return;
+    container.innerHTML = state ?? '';
+}
+function setAvatarUI(url, root) {
+    const el = root.querySelector('.soundBadge_avatar');
+    if (el && url) {
+        el.style.backgroundImage = `url("${url}")`;
+    }
+}
+function setTimelineUI(elapsed, duration, root) {
+    cachedElapsed = elapsed ?? 0;
+    cachedDuration = duration ?? 0;
+    lastUpdateTime = performance.now();
 
+    log("[Timeline] Updating timeline UI:", {
+        cachedElapsed,
+        cachedDuration
+    });
+    const remaining = Math.max(cachedDuration - cachedElapsed, 0);
+    const percent = cachedDuration > 0
+        ? (cachedElapsed / cachedDuration) * 100
+        : 0;
+    updateTimelineProgressBar(percent, root);
+    updateTimelineMetadataUI(cachedElapsed, cachedDuration, remaining, root);
+}
+function updateTimelineMetadataUI(elapsed, duration, remaining, root) {
+    const elapsedEl = root.querySelector('#current_time')
+    const durationEl = root.querySelector('#duration_total')
+    const remainingEl = root.querySelector('#duration_left')
+
+    if (elapsedEl) elapsedEl.textContent = formatTime(elapsed);
+    if (durationEl) durationEl.textContent = formatTime(duration);
+    if (remainingEl) remainingEl.textContent = `-${formatTime(remaining)}`;
+}
+function updateTimelineProgressBar(percent, root) {
+    const progressFill = root.querySelector('.progressBar');
+    const handle = root.querySelector('.progressHandle');
+
+    if (!progressFill) {
+        warn("[Timeline] .progressBar not found");
+    } else {
+        log("[Timeline] Settings progress bar width to:", `${percent}%`);
+        progressFill.style.setProperty('width', `${percent}%`);
+    }
+    if (!handle) {
+        warn("[Timeline] .progressHandle not found");
+    } else {
+        log("[Timeline] Moving handle to:", `${percent}%`);
+        handle.style.setProperty('left', `${percent}%`);
+    }
+}
+function startInterpolatedTimelineLoop(root) {
+    function loop() {
+        const now = performance.now();
+        
+        if (isPlaying) {
+            const delta = (now - lastUpdateTime) / 1000;
+            const virtualElapsed = cachedElapsed + delta;
+            const percent = cachedDuration > 0 ? (virtualElapsed / cachedDuration) * 100 : 0;
+            updateTimelineProgressBar(percent, root);
+        }
+        rafId = requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop)
+}
 function applySettingsToAllTabs(settings) {
     applyStartOpenSetting(!!settings['start-open-toggle']);
     applyActiveTabSetting(!!settings['active-tab-toggle']);
@@ -300,12 +382,15 @@ function setupButtonListeners(root) {
 /// ======== Message Listeners (react to state pushes) ========
 function setupMessageListeners() {
     const stateHandlers = {
-        "playpause-state-changed": setPlayPauseButtonUI,
-        "shuffle-state-changed": setShuffleButtonUI,
-        "repeat-state-changed": setRepeatButtonUI,
-        "time-display-changed": setTimeDisplayUI,
-        "like-state-changed": setLikeUI,
-        "follow-state-changed": setFollowUI,
+        "playpause-state-updated": setPlayPauseButtonUI,
+        "shuffle-state-updated": setShuffleButtonUI,
+        "repeat-state-updated": setRepeatButtonUI,
+        "time-display-updated": setTimeDisplayUI,
+        "like-state-updated": setLikeUI,
+        "follow-state-updated": setFollowUI,
+        "title-state-updated": setTitleUI,
+        "artist-state-updated": setArtistUI,
+        "avatar-state-updated": setAvatarUI,
     };
     browser.runtime.onMessage.addListener((msg) => {
         log("Incoming message:", msg);
@@ -314,31 +399,36 @@ function setupMessageListeners() {
         // When it is an all-states update
         if (msg.type === "all-states-updated") { //TODO MAYBE
             const states = msg.state || msg;
-            log("Received states update:", {
-                playPause: states.playPause,
-                shuffle: states.shuffle,
-                repeat: states.repeat,
-                time: states.time,
-                like: states.like,
-                follow: states.follow
-            });
-            if (states.playPause) {
-                stateHandlers["playpause-state-changed"](states.playPause, shadowRoot);
+            log("Received states update:", states);
+            if (states.playpause) {
+                stateHandlers["playpause-state-updated"](states.playpause, shadowRoot);
             }
             if (states.shuffle) {
-                stateHandlers["shuffle-state-changed"](states.shuffle, shadowRoot);
+                stateHandlers["shuffle-state-updated"](states.shuffle, shadowRoot);
             }
             if (states.repeat) {
-                stateHandlers["repeat-state-changed"](states.repeat, shadowRoot);
+                stateHandlers["repeat-state-updated"](states.repeat, shadowRoot);
             }
             if (states.time) {
-                stateHandlers["time-display-changed"](states.time, shadowRoot);
+                stateHandlers["time-display-updated"](states.time, shadowRoot);
             }
             if (states.like) {
-                stateHandlers["like-state-changed"](states.like, shadowRoot);
+                stateHandlers["like-state-updated"](states.like, shadowRoot);
             }
             if (states.follow) {   
-                stateHandlers["follow-state-changed"](states.follow, shadowRoot);
+                stateHandlers["follow-state-updated"](states.follow, shadowRoot);
+            }
+            if (states.songTitle) {
+                stateHandlers["title-state-updated"](states.songTitle, shadowRoot);
+            }
+            if (states.songArtist) {
+                stateHandlers["artist-state-updated"](states.songArtist, shadowRoot);
+            }
+            if (states.avatar) {
+                stateHandlers["avatar-state-updated"](states.avatar, shadowRoot);
+            }
+            if (states.secondsElapsed != null || states.duration != null) {
+                setTimelineUI(states.secondsElapsed, states.duration, shadowRoot);
             }
         }
         // When it is a single-state update
@@ -354,4 +444,10 @@ function setupMessageListeners() {
 
         }
     });
+}
+// Helper that formats time correctly 
+function formatTime(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
 }

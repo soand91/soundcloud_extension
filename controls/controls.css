@@ -180,7 +180,7 @@
 }
 .timePassed {
     display: block; 
-    min-width: 25px;
+    min-width: 26.65px;
 }
 .timePassed span {
     display: inline; text-align: right; 
@@ -199,6 +199,7 @@
 
 .timeProgress {
     position: relative; align-self: center;
+    width: 100%;
     margin: 0 8px; padding: 12px 0;
     flex-grow: 1;
 }
@@ -209,17 +210,19 @@
 }
 .progressBar {
     position: absolute;
-    height: 2px;
+    height: 2px; width: 0%;
     background-color: #f50;
+    transition: width 0.3s ease;
 }
 .progressHandle {
     position: absolute; box-sizing: border-box;
     margin-top: -3px; margin-left: -4px;
     width: 8px; height: 8px;
     border: 1.5px solid #f50; border-radius: 100%;
-    background-color: #fff;
+    background-color: #fff; 
+    left: 0%;
 
-    opacity: 0; transition: opacity 0.15s;
+    opacity: 0; transition: left 0.3s ease, opacity 0.15s ease;
 }
 .timeProgress:hover {
     cursor: pointer;
@@ -294,6 +297,9 @@
     position: relative; display: block;
     margin-right: 16px; cursor: pointer;
     width: 32px; height: 32px;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
     background-color: #fff;
     flex-shrink: 0;
 }

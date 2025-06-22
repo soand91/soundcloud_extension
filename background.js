@@ -1,18 +1,9 @@
 /// ======== Constants and State ========
 let soundcloudTabs = new Map();
 let activeSoundCloudTabId = null;
-let playpauseState = "paused";
-let repeatState = "off";
-let shuffleState = "inactive";
-let displayState = 'duration';
-let likeState = 'unliked';
-let followState = 'unfollowed';
-let timelineState = {
-    secondsElapsed: null,
-    duration: null
-};
-let lastBroadcastedTimelineStr = null;
-
+let tabStates = {};
+let pendingUpdateCache = {};
+let persistTimer = null;
 const DEFAULT_SETTINGS = {
     'start-open-toggle': false,
     'active-tab-toggle': false,
@@ -30,60 +21,6 @@ function bgWarn(...args) {
 function bgError(...args) {
     if (DEBUG) console.error("[Background]", ...args);
 }
-
-/// ======== Runtime Lifecycle Events ========
-// Load Settings and restore Active Tab on Startup
-browser.runtime.onStartup.addListener(async () => {
-    const settings = await getMergedSettings();
-    applySettingsToAllTabs(settings);
-    await restoreActiveSoundCloudTab();
-    await initializeSoundCloudTabs();
-    bgLog("[Startup] Settings applied and tab state restored");
-})
-// Load and merge Settings when extension freshly Updated or Reloaded
-browser.runtime.onInstalled.addListener(async ({ reason, previousVersion }) => {
-    if (reason === "install") {
-        await initializeDefaultSettings();
-        bgLog("[Install] Default settings initialized");
-    } else if (reason === "update") {
-        await migrateSettingsIfNeeded(previousVersion);
-        bgLog("[Update] Migrated settings from version ${previousVersion}");
-    }
-    const settings = await getMergedSettings();
-    applySettingsToAllTabs(settings);
-    await restoreActiveSoundCloudTab();
-    await initializeSoundCloudTabs();
-})
-// Central message router of [background.js]
-browser.runtime.onMessage.addListener(handleRuntimeMessage);
-
-
-/// ======== Tab Lifecycle Events ========
-// on Tab Updates: add/remove/update as necessary, update active as needed
-browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    handleTabNavigation(tabId, changeInfo, tab);
-});
-// on Tab Activation: 
-browser.tabs.onActivated.addListener(({ tabId }) => {
-    handleTabActivation(tabId);
-});
-// on Tab Removal: clean up map and active
-browser.tabs.onRemoved.addListener((tabId) => {
-    handleTabRemoval(tabId);
-})
-
-
-/// ======== Storage Events ========
-// Update settings when popup changes settings
-browser.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local') return;
-    for (const [key, { oldValue, newValue }] of Object.entries(changes)) {
-        if (SETTINGS_KEYS.includes(key)) {
-            applySettingsToAllTabs();
-            bgLog(`[Settings Change] ${key}:`, oldValue, "→", newValue);
-        }
-    }
-})
 
 
 /// ======== Helper Functions ========
@@ -125,54 +62,191 @@ async function applySettingsToAllTabs(settings) {
         bgLog(`[Settings] Broadcast attemp to ${tabs.length} tabs`)
     })
 }
-// Helper that Restores previously selected Active SoundCloud tab on Startup
-async function restoreActiveSoundCloudTab() {
-    const { activeSoundCloudTabId } = await browser.storage.local.get("activeSoundCloudTabId");
-    if (!activeSoundCloudTabId) {
-        bgWarn("[Restore] No active tab stored");
-        return;
-    }
+// Helper that detects all already-open SoundCloud tabs 
+async function initializeSoundCloudTabs() {
     try {
-        const tab = await browser.tabs.get(activeSoundCloudTabId);
-        if (tab.url && tab.url.includes("soundcloud.com")) {
-            setActiveSoundCloudTab(tab.id);
-            bgLog("[Restore] Restored valid active SC tab from storage:", tab.id, tab.url);
+        const tabs = await browser.tabs.query({ url: "*://soundcloud.com/*" });
+        for (const tab of tabs) {
+            const tabId = tab.id;
+            ensureTabState(tabId);
+            updateTabState(tabId, {
+                isSoundCloud: true,
+                url: tab.url, 
+                pageTitle: tab.title
+            }, { force: true });
+            injectControlsIntoTab(tabId);
+        }
+        bgLog(`[Init] Initialized ${tabs.length} SoundCloud tab(s)`);
+    } catch (e) {
+        bgWarn("[Init] Failed to scan for SoundCloud tabs:", e);
+    }
+}
+// Helper that Restores previously stored activeSoundCloudTabId from persistent storage on Startup
+async function restoreActiveSoundCloudTab() {
+    const { activeSoundCloudTabId: savedId } = await browser.storage.local.get("activeSoundCloudTabId");
+    if (savedId) {
+        try {
+            const tab = await browser.tabs.get(savedId);
+            if (tab.url && tab.url.includes("soundcloud.com")) {
+                await setActiveSoundCloudTab(savedId);
+                updateAllStatesForActiveTab();
+                bgLog("[Restore] Rehydrated active tab from saved ID:", savedId);
+                return;
+            }
+        } catch (e) {
+            bgWarn("[Restore] Failed to rehydrate tab:", savedId, e);
+        }
+    }
+    bgLog("[Restore] No saved tab or valid fallback found");
+}
+// Helper that Restores previously stored tabStates object from persistent storage on Startup
+async function restoreTabStatesFromStorage() { //TODO
+    try {
+        const result = await browser.storage.local.get("tabStates");
+        if (result.tabStates && typeof result.tabStates === "object") {
+            tabStates = result.tabStates;
+            const count = Object.keys(tabStates).length;
+            bgLog(`[Restore] Restored ${count} tabStates from storage`);
         } else {
-            bgWarn("[Restore] Tab is no longer a valid SoundCLoud page:", tab.id, tab.url);
+            bgWarn("[Restore] tabStates is missing or malformed");
         }
     } catch (err) {
-        bgWarn("[Restore] Stored active tab ID is invalid or closed:", activeSoundCloudTabId);
+        bgWarn("[Restore] Failed to restore tabStates:", err);
     }
+}
+// Helper that injects [soundcloud-controls.js] script into each SC tab
+//! might have to fix redundancy. manual injection vs. scripted injection (via manifest)
+async function injectControlsIntoTab(tabId) {
+    const tab = await browser.tabs.get(tabId);
+    if (!tab.url || !tab.url.includes("soundcloud.com")) return; 
+    
+    // Prevent injection into login, settings, etc. 
+    const blacklistPatterns = [
+        "/signin", 
+        "/you/settings",
+        "/upload"
+    ];
+    
+    if (blacklistPatterns.some(path => tab.url.includes(path))) {
+        bgLog("[Inject] Skipped blacklisted URL:", tab.url);
+        return;
+    }
+
+    browser.scripting.executeScript({
+        target: { tabId },
+        files: ["content/soundcloud-controls.js"]
+    }).then(() => {
+        bgLog("[Inject] Controls injected into tab:", tabId);
+    }).catch(err => {
+        bgWarn("[Inject] Failed to inject into tab:", tabId, err);
+    });
+}
+// Helper that detects SC tabs, injects script, and tracks state
+async function handleTabNavigation(tabId, changeInfo, tab) {
+    if (!tab.url) return;
+
+    const isSC = tab.url.includes("soundcloud.com");
+
+    if (isSC) {
+        ensureTabState(tabId);
+        updateTabState(tabId, {
+            isSoundCloud: true,
+            url: tab.url,
+            pageTitle: tab.title
+        }, { force: true });
+        if (changeInfo.status === "complete" || changeInfo.url) {
+            if (activeSoundCloudTabId !== tabId) {
+                setActiveSoundCloudTab(tabId);
+            }
+            injectControlsIntoTab(tabId);
+            bgLog("[TabUpdate] SC tab tracked and possibly made active:", tabId, tab.url)
+        }
+    } else {
+        removeTabAndReassignIfActive(tabId);
+    }
+}
+// Helper that updates active tab if needed 
+async function handleTabActivation(tabId) {
+    try {
+        const tab = await browser.tabs.get(tabId);
+        if (tab.url && tab.url.includes("soundcloud.com") && tabId !== activeSoundCloudTabId) {
+            for (const id of Object.keys(tabStates)) {
+                tabStates[id].isActive = false;
+            }
+            ensureTabState(tabId);
+            updateTabState(tabId, {
+                isSoundCloud: true,
+                url: tab.url,
+                pageTitle: tab.title,
+                isActive: true
+            }, { force: true });
+            setActiveSoundCloudTab(tabId);
+            bgLog("[TabFocus] User switched to SC tab:", tabId);
+        }
+    } catch (e) {
+        bgWarn("[TabFocus] Failed to access activated tab:", tabId, e);
+    }
+}
+// Helper that removes tab from map, and reassigns active tab 
+async function handleTabRemoval(tabId) {
+    removeTabAndReassignIfActive(tabId)
 }
 // Helper that sets and persists a new Active SoundCloud tab to memory
 async function setActiveSoundCloudTab(tabId) {
     activeSoundCloudTabId = tabId;
+    // Ensure structure exists
+    ensureTabState(tabId);
+    // Clear isActive from all then set isActive to specific tab
+    for (const id in tabStates) {
+        tabStates[id].isActive = false;
+    }
+    tabStates[tabId].isActive = true;
+    // Persist
     try {
         await browser.storage.local.set({ activeSoundCloudTabId: tabId });
         bgLog("[ActiveTab] Updated and persisted active tab ID:", tabId);
     } catch (err) {
         bgWarn("[ActiveTab] Failed to persist active tab ID:", err);
     }
-    updateAllStatesForActiveTab();
-}
-// Helper that updates all states on active tab switch
-function updateAllStatesForActiveTab() {
-    if (!activeSoundCloudTabId) {
-        bgWarn("[StateSync] No active SoundCloud tab to sync with");
-        return;
+    // Broadcast known state if present
+    const knownState = tabStates[tabId];
+    if (knownState) {
+        broadcastStateToContentTabs("all-states-updated", knownState);
+        bgLog("[ActiveTab] Broadcasted cached state for tab:", tabId);
+    } else {
+        bgWarn("[ActiveTab] No known state to broadcast for tab:", tabId);
     }
-    browser.tabs.sendMessage(activeSoundCloudTabId, { type: "get-all-states" })
-        .then(states => {
-            if (!states) {
-                bgWarn("[StateSync] Empty state response from active tab:", activeSoundCloudTabId);
-                return;
-            }
-            broadcastStateToContentTabs("all-states-updated", states);
-            bgLog("[StateSync] Got states from active tab:", states);
-        })
-        .catch(err => {
-            bgWarn("[StateSync] Failed to get states from active tab:", err);
-        });
+}
+// Helper that finds and sets SoundCloud tab ID if not known
+async function ensureSoundCloudTabId() {
+    bgLog("[TabCheck] Starting ensureSoundCloudTabID");
+    
+    // 1. Try the current active
+    if (activeSoundCloudTabId !== null) {
+        try {
+            const tab = await browser.tabs.get(activeSoundCloudTabId);
+            if (tab.url && tab.url.includes("soundcloud.com")) {
+                bgLog("[TabCheck] Existing active tab is valid:", tab.id, tab.url);
+                return tab.id;
+            } 
+        } catch (e) {
+            bgWarn("[TabCheck] Existing tab lookup failed:", e);
+            activeSoundCloudTabId = null;
+        }
+    }
+    // 2. Look for a fallback from tabStates
+    const fallbackId = Object.keys(tabStates).find(id => {
+        const state = tabStates[id];
+        return state?.isSoundCloud;
+    });
+    if (fallbackId) {
+        await setActiveSoundCloudTab(Number(fallbackId));
+        bgLog("[TabCheck] Fallback SC tab promoted to active:", fallbackId);
+        return Number(fallbackId);
+    }
+    // 3. No valid tab found
+    bgWarn("[TabCheck] No valid SoundCloud tab found");
+    return null;
 }
 // Helper that broadcasts 
 async function broadcastStateToContentTabs(type, state) {
@@ -194,176 +268,195 @@ async function broadcastStateToContentTabs(type, state) {
         bgWarn("[Broadcast] Failed to query tabs:", err);
     }
 }
-// Helper that detects SC tabs, injects script, and tracks state
-async function handleTabNavigation(tabId, changeInfo, tab) {
-    if (!tab.url) return;
-    if (tab.url.includes("soundcloud.com")) {
-        soundcloudTabs.set(tabId, { title: tab.title, url: tab.url });
-        // Trigger only if it's a new navigation or fully loaded
-        if (changeInfo.status === "complete" || changeInfo.url) {
-            if (activeSoundCloudTabId !== tabId) {
-                setActiveSoundCloudTab(tabId);
-            }
-            injectControlsIntoTab(tabId);
-            bgLog("[TabUpdate] SC tab tracked and possibly made active:", tabId, tab.url);
-        }
-    } else {
-        // Navigated away from SoundCloud
-        if (soundcloudTabs.has(tabId)) {
-            soundcloudTabs.delete(tabId);
-            bgLog("[TabUpdate] Tab navigated away from SC, removed:", tabId);
-            
-            if (tabId === activeSoundCloudTabId) {
-                const fallbackId = [...soundcloudTabs.keys()][0] || null;
-                if (fallbackId) {
-                    setActiveSoundCloudTab(fallbackId);
-                    bgLog("[TabUpdate] Active tab closed, switched to fallback:", fallbackId);
-                } else {
-                    activeSoundCloudTabId = null;
-                    browser.storage.local.remove("activeSoundCloudTabId");
-                    bgLog("[TabUpdate] No SC tabs remain; active ID cleared");
-                }
-            }
-        }
+// Helper that persists tab states
+function persistTabStates() { //TODO
+    if (persistTimer) clearTimeout(persistTimer);
+    persistTimer = setTimeout(() => {
+        browser.storage.local.set({ tabStates })
+            .then(() => bgLog("[Persist] tabStates saved to storage"))
+            .catch(err => bgWarn("[Persist] Failed to persist tabStates:", err));
+    }, 500);
+}
+// Helper that initializes the state for a specific tab ID if it doesn't already exist in tabStates
+function ensureTabState(tabId) {
+    if (!tabStates[tabId]) {
+        tabStates[tabId] = {
+            // Lifecycle & presence trackers
+            isSoundCloud: false,
+            isActive: false,
+            url: null,
+            pageTitle: null,
+            // Player controls
+            playpause: "paused",
+            repeat: "off",
+            shuffle: "off", 
+            display: "duration",
+            like: "unliked",
+            follow: "unfollowed",
+            songTitle: null, 
+            songArtist: null,
+            // Timeline tracking
+            secondsElapsed: null, 
+            duration: null,
+
+            lastUpdated: Date.now()
+        };
     }
 }
-// Helper that updates active tab if needed 
-async function handleTabActivation(tabId) {
-    try {
-        const tab = await browser.tabs.get(tabId);
-        if (tab.url && tab.url.includes("soundcloud.com") && tabId !== activeSoundCloudTabId) {
-            setActiveSoundCloudTab(tabId);
-            bgLog("[TabFocus] User switched to SC tab:", tabId);
-        }
-    } catch (e) {
-        bgWarn("[TabFocus] Failed to access activated tab:", tabId, e);
+// Helper that clears and reassigns active SoundCloud tab
+function removeTabAndReassignIfActive(tabId) {
+    const wasActive = tabId === activeSoundCloudTabId;
+    const wasSoundCloud = tabStates[tabId]?.isSoundCloud;
+
+    if (wasSoundCloud) {
+        delete tabStates[tabId];
+        bgLog("[TabCleanup] Removed SC tab from tabStates:", tabId);
     }
-}
-// Helper that removes tab from map, and reassigns active tab 
-async function handleTabRemoval(tabId) {
-    if (soundcloudTabs.delete(tabId)) {
-        bgLog("[TabClose] Removed SC tab from map:", tabId);
-    }
-    if (tabId === activeSoundCloudTabId) {
-        const fallbackId = [...soundcloudTabs.keys()][0] || null;
+
+    if (wasActive) {
+        const fallbackId = Object.keys(tabStates).find(id => tabStates[id]?.isSoundCloud);
         if (fallbackId) {
-            setActiveSoundCloudTab(fallbackId);
-            bgLog("[TabClose] Active tab closed, switched to fallback:", fallbackId);
+            setActiveSoundCloudTab(Number(fallbackId));
+            bgLog("[TabCleanup] Active tab reassigned to fallback:", fallbackId);
         } else {
             activeSoundCloudTabId = null;
             browser.storage.local.remove("activeSoundCloudTabId");
-            bgLog("[TabClose] No SC tabs remain; active ID cleared");
+            bgLog("[TabCleanup] No SC tabs remain; active ID cleared");
         }
     }
 }
-// Helper that injects [soundcloud-controls.js] script into each SC tab
-function injectControlsIntoTab(tabId) {
-    browser.scripting.executeScript({
-        target: { tabId },
-        files: ["content/soundcloud-controls.js"]
-    }).then(() => {
-        bgLog("[Inject] Controls injected into tab:", tabId);
-    }).catch(err => {
-        bgWarn("[Inject] Failed to inject into tab:", tabId, err);
-    });
-}
-// Helper that detects all already-open SoundCloud tabs 
-async function initializeSoundCloudTabs() {
-    const tabs = await browser.tabs.query({ url: "*://soundcloud.com/*" });
-    for (const tab of tabs) {
-        soundcloudTabs.set(tab.id, { title: tab.title, url: tab.url });
-        injectControlsIntoTab(tab.id);
-        bgLog("[Init] Injected and tracked SC tab:", tab.id, tab.url);
+// Helper that sends full cached state from tabStates 
+function updateAllStatesForActiveTab() {
+    if (!activeSoundCloudTabId || !tabStates[activeSoundCloudTabId]) {
+        bgWarn("[StateSync] No active tab or state to update from.");
+        return;
     }
-    if (tabs.length > 0 && !activeSoundCloudTabId) {
-        await setActiveSoundCloudTab(tabs[tabs.length - 1].id);
-    }
-}
-// Helper that finds and sets SoundCloud tab ID if not known
-async function ensureSoundCloudTabId(callback) {
-    bgLog("[TabCheck] Starting ensureSoundCloudTabID");
-    try {
-        if (activeSoundCloudTabId !== null) {
-            bgLog("[TabCheck] Checking existing active tab ID:", activeSoundCloudTabId);
-            try {
-                const tab = await browser.tabs.get(activeSoundCloudTabId);
-                if (tab.url && tab.url.includes('soundcloud.com')) {
-                    bgLog("[TabCheck] Existing tab is valid:", tab.id, tab.url);
-                    callback(activeSoundCloudTabId);
-                    updateAllStatesForActiveTab();
-                    return;
-                }
-            } catch (e) {
-                bgWarn("[TabCheck] Existing tab lookup failed:", e);
-                activeSoundCloudTabId = null;
-            }
-        }
-        bgLog("[TabCheck] Scanning tracked SoundCloud tabs...");
-        for (let [tabId, _] of soundcloudTabs) {
-            try {
-                const tab = await browser.tabs.get(tabId);
-                if (tab.url && tab.url.includes('soundcloud.com')) {
-                    activeSoundCloudTabId = tabId;
-                    bgLog("[TabCheck] Found new active tab:", tabId);
-                    updateAllStatesForActiveTab();
-                    callback(tabId);
-                    return;
-                }
-            } catch (e) {
-                bgWarn("[TabCheck] Failed to retrieve or validate tab:", tabId, e);
-                soundcloudTabs.delete(tabId);
-            }
-        }
-        bgWarn("[TabCheck] No valid SoundCloud tab found");
-        callback(null);
-    } catch (e) {
-        bgWarn("[TabCheck] Critical error in ensureSoundCloudTabId:", e);
-        callback(null);
-    }
-}
-// Helper that formats time correctly
-function formatTime(seconds) {
-    const m = Math.floor(seconds / 60);
-    const s = Math.floor(seconds % 60);
-    return `${m}:${s.toString().padStart(2, '0')}`;
-}
-// Helper that parses timeline number and broadcasts
-let timelineBroadcastTimer = null;
-function maybeBroadcastTimeline(tabId) {
-    clearTimeout(timelineBroadcastTimer);
-    timelineBroadcastTimer = setTimeout(() => {
-        if (
-            timelineState.secondsElapsed == null || timelineState.duration == null
-        ) return; // Don't broadcast incomplete state
-        const percent = timelineState.duration > 0
-            ? (timelineState.secondsElapsed / timelineState.duration) * 100
-            : 0; // Math for establishing timelineBar percent
-        const timeline = {
-            tabId, 
-            secondsElapsed: timelineState.secondsElapsed,
-            duration: timelineState.duration,
-            percent,
-            timeFormatted: formatTime(timelineState.secondsElapsed),
-            durationFormatted: formatTime(timelineState.duration)
-        };
-        const str = JSON.stringify(timeline);
-        if (str !== lastBroadcastedTimelineStr) {
-            browser.runtime.sendMessage({
-                type: 'timeline-state-updated', 
-                state: timeline
-            });
-            bgLog("Updated timeline state:", timeline);
-            lastBroadcastedTimelineStr = str;
-        }
-    }, 100);
+    const state = tabStates[activeSoundCloudTabId];
+    broadcastStateToContentTabs("all-states-updated", state);
+    bgLog("[StateSync] Broadcasted all-states-updated from active tab:", activeSoundCloudTabId);
 }
 
+
+/// ======== Runtime Lifecycle Events ========
+// Load Settings and restore Active Tab on Startup
+browser.runtime.onStartup.addListener(async () => {
+    const settings = await getMergedSettings();
+    applySettingsToAllTabs(settings);
+    await restoreActiveSoundCloudTab();
+    await initializeSoundCloudTabs(); //TODO
+    bgLog("[Startup] Settings applied and tab state restored");
+})
+// Load and merge Settings when extension freshly Updated or Reloaded
+browser.runtime.onInstalled.addListener(async ({ reason, previousVersion }) => {
+    if (reason === "install") {
+        await initializeDefaultSettings();
+        bgLog("[Install] Default settings initialized");
+    } else if (reason === "update") {
+        await migrateSettingsIfNeeded(previousVersion);
+        bgLog("[Update] Migrated settings from version ${previousVersion}");
+    }
+    const settings = await getMergedSettings();
+    applySettingsToAllTabs(settings);
+    await restoreActiveSoundCloudTab();
+    await initializeSoundCloudTabs(); //TODO
+})
+// Central message router of [background.js]
+browser.runtime.onMessage.addListener(handleRuntimeMessage);
+
+
+/// ======== Tab Lifecycle Events ========
+// on Tab Updates: add/remove/update as necessary, update active as needed
+browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    handleTabNavigation(tabId, changeInfo, tab);
+});
+// on Tab Activation: 
+browser.tabs.onActivated.addListener(({ tabId }) => {
+    handleTabActivation(tabId);
+});
+// on Tab Removal: clean up map and active
+browser.tabs.onRemoved.addListener((tabId) => {
+    handleTabRemoval(tabId);
+})
+
+
+/// ======== Storage Events ========
+// Update settings when popup changes settings
+browser.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    for (const [key, { oldValue, newValue }] of Object.entries(changes)) {
+        if (SETTINGS_KEYS.includes(key)) {
+            applySettingsToAllTabs();
+            bgLog(`[Settings Change] ${key}:`, oldValue, "→", newValue);
+        }
+    }
+})
+
+
+/// ======== Runtime Message Handler ========
+// State update senders
+const defaultBroadcastIfActive = (tabId) => {
+    if (tabId === activeSoundCloudTabId) {
+        broadcastStateToContentTabs("all-states-updated", tabStates[tabId]);
+    }
+};
+const fieldMap = {
+    // Standard button/toggler states
+    "playpause-state-updated":  { field: "playpause", afterUpdate: defaultBroadcastIfActive },
+    "repeat-state-updated":     { field: "repeat", afterUpdate: defaultBroadcastIfActive },
+    "shuffle-state-updated":    { field: "shuffle", afterUpdate: defaultBroadcastIfActive },
+    "like-state-updated":       { field: "like", afterUpdate: defaultBroadcastIfActive },
+    "follow-state-updated":     { field: "follow", afterUpdate: defaultBroadcastIfActive },
+    "avatar-state-updated":   { field: "avatar", afterUpdate: defaultBroadcastIfActive },
+    "display-state-updated":    { field: "display", afterUpdate: defaultBroadcastIfActive },
+    // Timeline metadata 
+    "songTitle-state-updated":  { field: "songTitle", afterUpdate: defaultBroadcastIfActive },
+    "songArtist-state-updated": { field: "songArtist", afterUpdate: defaultBroadcastIfActive },
+    "duration-state-updated":   { field: "duration", afterUpdate: defaultBroadcastIfActive },
+    // Timeline live ticker fields
+    "secondsElapsed-state-updated": { field: "secondsElapsed", afterUpdate: defaultBroadcastIfActive },
+};
 // Central message handler 
-async function handleRuntimeMessage(msg, sender) {
-    const tabId = sender?.tab?.id;
+async function handleRuntimeMessage(msg, sender, sendResponse) {
+    if (!msg || typeof msg !== "object" || typeof msg.type !== "string") return;
+
+    const tabId = sender?.tab?.id || msg.tabId;
     if (!tabId) return;
+
+    // 1. For the state-updated messages
+    const fieldEntry = fieldMap[msg.type];
+    if (fieldEntry) {
+        bgLog("message received:", {
+            type: msg.type,
+            state: msg.state,
+            tabId: tabId
+        });
+        const { field, afterUpdate } = fieldEntry;
+        const changed = updateTabState(tabId, { [field]: msg.state });
+        if (changed) {
+            if (afterUpdate) afterUpdate(tabId, msg.state);
+        }
+        return true; 
+    }
+    // 2. For all others
     switch (msg.type) {
-        case "get-soundcloud-tabs": 
+        case "get-settings":
+            const settings = await browser.storage.local.get(SETTINGS_KEYS);
+            bgLog("[Settings] Responding to get-settings with:", settings);
+            return settings;
+        case "get-all-states-active": // For toolbar //TODO
+            const state = tabStates[activeSoundCloudTabId] || null;
+            bgLog(`[State] get-all-states-active | tab ${activeSoundCloudTabId}:`, state);
+            return state;
+        case "get-tab-states-summary": // For popup //TODO
+            return Object.entries(tabStates).map(([tabId, state]) => ({
+                tabId, 
+                songTitle: state.songTitle,
+                playpause: state.playpause
+            }));
+        case "get-all-states": // For unified states
+            bgLog("[State] Responding to get-all-states with:", tabStates)
+            return tabStates;
+        case "get-soundcloud-tabs": //TODO
             if (!soundcloudTabs || !(soundcloudTabs instanceof Map)) {
                 bgWarn("[Background] soundcloudTabs is undefined or invalid");
                 return ({ tabs: [], error: "No soundcloudTabs map available." });
@@ -373,7 +466,7 @@ async function handleRuntimeMessage(msg, sender) {
             const tabs = Array.from(soundcloudTabs.entries()).map(([tabId, info]) => {
                 const tabObj = {
                     tabId, 
-                    title: info?.title || "(Untitled)",
+                    pageTitle: info?.pageTitle || "(Untitled)",
                     url: info?.url || "(No URL)",
                     isActive: tabId === activeId,
                 };
@@ -382,7 +475,7 @@ async function handleRuntimeMessage(msg, sender) {
             });
             bgLog(`[Background] Returning ${tabs.length} SoundCloud tab(s). Active ID: ${activeId}`);
             return { tabs };        
-        case "set-active-soundcloud-tabs":
+        case "set-active-soundcloud-tabs": //TODO
             await setActiveSoundCloudTab(msg.tabId);
             return { success: true };
         case "playpause-state-get-request":
@@ -393,7 +486,7 @@ async function handleRuntimeMessage(msg, sender) {
             return { state: repeatState };
         case "playpause-toggle-request":
             bgLog("playpause toggle request received");
-            ensureSoundCloudTabId(tabId => {
+            ensureSoundCloudTabId().then(tabId => {
                 bgLog("playpause toggle command send initiated");
                 if (tabId === null) {
                     bgLog("[Playpause request] No SoundCloud tab found");
@@ -405,7 +498,7 @@ async function handleRuntimeMessage(msg, sender) {
             });
             return true;
         case "shuffle-toggle-request":
-            ensureSoundCloudTabId(tabId => {
+            ensureSoundCloudTabId().then(tabId => {
                 if (tabId === null) {
                     bgLog("[Shuffle request] No SoundCloud tab found");
                     return;
@@ -416,7 +509,7 @@ async function handleRuntimeMessage(msg, sender) {
             });
             return true;
         case "repeat-toggle-request":
-            ensureSoundCloudTabId(tabId => {
+            ensureSoundCloudTabId().then(tabId => {
                 if (tabId === null) {
                     bgLog("[Repeat request] No SoundCloud tab found");
                     sendResponse({ success: false });
@@ -434,7 +527,7 @@ async function handleRuntimeMessage(msg, sender) {
             })
             return true;
         case "skip-prev-request":
-            ensureSoundCloudTabId(tabId => {
+            ensureSoundCloudTabId().then(tabId => {
                 if (tabId === null) {
                     bgLog("[Skip Prev request] No SoundCloud tab found");
                     return;
@@ -445,7 +538,7 @@ async function handleRuntimeMessage(msg, sender) {
             });
             return true;
         case "skip-next-request":
-            ensureSoundCloudTabId(tabId => {
+            ensureSoundCloudTabId().then(tabId => {
                 if (tabId === null) {
                     bgLog("[Skip Next request] No SoundCloud tab found");
                     return;
@@ -456,7 +549,7 @@ async function handleRuntimeMessage(msg, sender) {
             });
             return true;
         case "timeBtn-click-request":
-            ensureSoundCloudTabId(tabId => {
+            ensureSoundCloudTabId().then(tabId => {
                 if (tabId === null) {
                     bgLog("[Time Button request] No SoundCloud tab found");
                     return;
@@ -467,7 +560,7 @@ async function handleRuntimeMessage(msg, sender) {
             });
             return true;            
         case "avatar-click-request":
-            ensureSoundCloudTabId(tabId => {
+            ensureSoundCloudTabId().then(tabId => {
                 if (tabId === null) {
                     bgLog("[Avatar Click request] No SoundCloud tab found");
                     return;
@@ -478,7 +571,7 @@ async function handleRuntimeMessage(msg, sender) {
             })
             return true;
         case "artist-click-request":
-            ensureSoundCloudTabId(tabId => {
+            ensureSoundCloudTabId().then(tabId => {
                 if (tabId === null) {
                     bgLog("[Artist Click request] No SoundCloud tab found");
                     return;
@@ -489,7 +582,7 @@ async function handleRuntimeMessage(msg, sender) {
             })
             return true;    
         case "title-click-request":
-            ensureSoundCloudTabId(tabId => {
+            ensureSoundCloudTabId().then(tabId => {
                 if (tabId === null) {
                     bgLog("[Title Click request] No SoundCloud tab found");
                     return;
@@ -500,7 +593,7 @@ async function handleRuntimeMessage(msg, sender) {
             })
             return true;              
         case "like-request":
-            ensureSoundCloudTabId(tabId => {
+            ensureSoundCloudTabId().then(tabId => {
                 if (tabId === null) {
                     bgLog("[Like Click request] No SoundCloud tab found");
                     return;
@@ -511,7 +604,7 @@ async function handleRuntimeMessage(msg, sender) {
             })
             return true;
         case "follow-request":
-            ensureSoundCloudTabId(tabId => {
+            ensureSoundCloudTabId().then(tabId => {
                 if (tabId === null) {
                     bgLog("[Follow Click request] No SoundCloud tab found");
                     return;
@@ -522,7 +615,7 @@ async function handleRuntimeMessage(msg, sender) {
             })
             return true;
         case "queue-request":
-            ensureSoundCloudTabId(tabId => {
+            ensureSoundCloudTabId().then(tabId => {
                 if (tabId === null) {
                     bgLog("[Queue Click request] No SoundCloud tab found");
                     return;
@@ -531,69 +624,77 @@ async function handleRuntimeMessage(msg, sender) {
                     .then(() => bgLog("[Queue Click request] Queue click command sent"))
                     .catch(err => bgError("[Queue Click request] Failed to send queue click", err));
             })
-            return true;                        
-        case "playpause-state-updated":
-            playpauseState = msg.state;
-            broadcastStateToContentTabs("playpause-state-changed", playpauseState);
-            return true;
-        case "shuffle-state-updated":
-            shuffleState = msg.state;
-            broadcastStateToContentTabs("shuffle-state-changed", shuffleState);
-            return true;
-        case "repeat-state-updated":
-            repeatState = msg.state;
-            broadcastStateToContentTabs("repeat-state-changed", repeatState);
-            return true;
-
-        case "time-display-state-updated":
-            displayState = msg.state;
-            broadcastStateToContentTabs("time-display-changed", displayState);
-            return true;
-        case "timeline-duration-state-updated":
-            timelineState.duration = msg.state;
-            maybeBroadcastTimeline(tabId);
-            bgLog("Received duration:", msg.state);
-            return true;
-        case "timeline-secondsElapsed-state-updated":
-            timelineState.secondsElapsed = msg.state;
-            maybeBroadcastTimeline(tabId);
-            bgLog("Received secondsElapsed:", msg.state);
-            return true;
-
-
-        case "like-state-updated":
-            likeState = msg.state;
-            broadcastStateToContentTabs("like-state-changed", likeState);
-            return true;
-        case "follow-state-updated":
-            followState = msg.state;
-            broadcastStateToContentTabs("follow-state-changed", followState);
-            return true;
-
-
-        case "get-settings":
-            const settings = await browser.storage.local.get(SETTINGS_KEYS);
-            bgLog("[Background] Responding to get-settings with:", settings);
-            return settings;
-        case "get-all-states":
-            bgLog("[Background] Responding to get-all-states with:", {
-                playpause: playpauseState,
-                shuffle: shuffleState,
-                repeat: repeatState,
-                time: displayState,
-                like: likeState,
-                follow: followState
-            });
-            return {
-                playpause: playpauseState,
-                shuffle: shuffleState,
-                repeat: repeatState,
-                time: displayState,
-                like: likeState,
-                follow: followState
-            };
+            return true;   
 
         default:
-            bgWarn("Unknown message type:", msg.type)
+            bgWarn("[Message] Unhandled message type:", msg.type);
+            break;
     }
+    return true;
+};
+/// ======== Two-level Change Filter ========
+const perFieldChangeLogic = {
+    // Toggle buttons should always be accepted
+    playpause: (oldVal, newVal) => oldVal !== newVal,
+    shuffle: (oldVal, newVal) => oldVal !== newVal,
+    repeat: (oldVal, newVal) => oldVal !== newVal,
+    like: (oldVal, newVal) => oldVal !== newVal,
+    follow: (oldVal, newVal) => oldVal !== newVal,
+    display: (oldVal, newVal) => oldVal !== newVal,
+    // Tickers should allow small changes
+    secondsElapsed: (oldVal, newVal) => 
+        typeof newVal === "number" && Math.abs(newVal - oldVal) >= 1,
+    // Title should have strict identity
+    songTitle: (oldVal, newVal) => oldVal !== newVal,
+    songArtist: (oldVal, newVal) => oldVal !== newVal,
+    // Duration should only accept if title also changed
+    // duration: (oldVal, newVal, tabId) => {
+    //     if (oldVal === newVal) return false;
+    //     const oldTitle = tabStates[tabId]?.songTitle;
+    //     const newTitle = pendingUpdateCache[tabId]?.songTitle ?? oldTitle;
+    //     return oldTitle !== newTitle;
+    // }
+    duration: (oldVal, newVal) => oldVal !== newVal
+}
+// Helper that filters via the perFieldChangeLogic
+function hasMeaningfulChange(tabId, partialState) {
+    const prev = tabStates[tabId] || {};
+    pendingUpdateCache[tabId] = { ...prev, ...partialState};
+
+    for (const [key, newVal] of Object.entries(partialState)) {
+        const oldVal = prev[key];
+        const checkFn = perFieldChangeLogic[key];
+
+        let changed;
+        if (checkFn) {
+            changed = checkFn(oldVal, newVal, tabId);
+            bgLog(`[Check] ${key}: old=${JSON.stringify(oldVal)} new=${JSON.stringify(newVal)} → ${changed}`)
+        } else {
+            if (oldVal !== newVal) return true;
+            bgLog(`[Check] ${key}: (no logic) old=${JSON.stringify(oldVal)} new=${JSON.stringify(newVal)} → ${changed}`)
+        }
+        if (changed) return true;
+    }
+    bgLog(`[Check] No meaningful changes for tab ${tabId}`);
+    return false;
+}
+// Helper that checks each change that it is new and persists to storage.local
+function updateTabState(tabId, partialState, { force = false, suppressTimeStamp = false }= {}) {
+    ensureTabState(tabId);
+    
+    if (!force && !hasMeaningfulChange(tabId, partialState)) {
+        bgLog(`[Update] Ignored: No changes for tab ${tabId}`);
+        return false; // No update
+    }
+    
+    Object.assign(tabStates[tabId], partialState);
+
+    if (!suppressTimeStamp) {
+        tabStates[tabId].lastUpdated = Date.now();
+    }
+
+    bgLog(`[Update] Applied to tab ${tabId}: `, JSON.stringify(partialState));
+    delete pendingUpdateCache[tabId];
+
+    return true;
 }

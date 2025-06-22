@@ -38,8 +38,11 @@ function getRepeatStateFromDOM() {
     return 'off'
 }
 function getTimeDisplayStateFromDOM() {
-    const timeSpan = document.querySelector('.playbackTimeline__duration span[aria-hidden="true"]');
-    if (!timeSpan) return "unknown";
+    const displayContainer = document.querySelector('.playbackTimeline__duration');
+    if (!displayContainer) return "unknown";
+
+    const timeSpan = displayContainer.querySelector('span[aria-hidden="true"]');
+    if (!timeSpan || !timeSpan.textContent.trim()) return "unknown";
 
     const text = timeSpan.textContent.trim();
     return text.startsWith("-") ? "remaining" : "duration";
@@ -62,72 +65,59 @@ function getQueueStateFromDOM() { //TODO
     if (title.includes("")) return "";
     return "unknown"
 }
+function getSongTitleFromDOM() {
+    const titleEl = document.querySelector('.playbackSoundBadge__titleLink span[aria-hidden="true"]');
+    return titleEl?.textContent?.trim() ?? null;
+}
+function getSongArtistFromDOM() {
+    const ArtistEl = document.querySelector('.playbackSoundBadge__lightLink');
+    return ArtistEl?.textContent?.trim() ?? null;
+}
+function getDurationFromDOM() { //! This returns total song duration in seconds only if duration mode (not remaining)
+    const el = document.querySelector('.playbackTimeline__progressWrapper');
+    const val = el?.getAttribute('aria-valuemax');
+    return val ? Number(val) : null;
+}
+function getElapsedSecondsFromDOM() { //! This returns seconds that is used to show time passed, calculate bar width and handle left via divide getElapsedSeconds / getDuration
+    const el = document.querySelector('.playbackTimeline__progressWrapper');
+    const val = el?.getAttribute('aria-valuenow');
+    return val ? Number(val) : null;
+}
+function getAvatarURL() {
+    const artworkEl = document.querySelector('.playbackSoundBadge__avatar .sc-artwork.image__full');
+    if (!artworkEl) return null;
+
+    const bg = getComputedStyle(artworkEl).backgroundImage;
+    const match = bg.match(/url\("(.+?)"\)/);
+    return match ? match[1] : null;
+}
 function getAllStatesFromDOM() {
     return {
         playPause: getPlayPauseStateFromDOM(),
         shuffle: getShuffleStateFromDOM(),
         repeat: getRepeatStateFromDOM(),
-        time: getTimeDisplayStateFromDOM(),
         like: getLikeStateFromDOM(),
-        follow: getFollowStateFromDOM()
+        follow: getFollowStateFromDOM(),
+        display: getTimeDisplayStateFromDOM(),
+        songTitle: getSongTitleFromDOM(),
+        songArtist: getSongArtistFromDOM(),
+        avatar: getAvatarURL(),
+        duration: getDurationFromDOM(),
+
+        secondsElapsed: getElapsedSecondsFromDOM(),
     };
 }
 
-function getElapsedSeconds() { //! This returns seconds that is used to show time passed, calculate bar width and handle left via divide getElapsedSeconds / getDuration
-    const el = document.querySelector('.playbackTimeline__progressWrapper');
-    const val = el?.getAttribute('aria-valuenow');
-    return val ? Number(val) : null;
-}
-function getDuration() { //! This returns total song duration in seconds used to display duration or remaining
-    const el = document.querySelector('.playbackTimeline__duration span[aria-hidden="true"]');
-    if (!el) return null;
-    const text = el.textContent.trim();
-    const isRemaining = text.startsWith('-');
-    const seconds = parseTimeString(text.replace('-', ''));
-
-    if (isRemaining) {
-        const passed = getElapsedSeconds();
-        return (passed != null) ? passed + seconds : null;
+// Helper to convert strings _:__ to seconds number
+function parseTimeString(timeStr) {
+    const parts = timeStr.split(':').map(Number);
+    if (parts.length === 2) {
+        const [minutes, seconds] = parts;
+        return minutes * 60 + seconds;
     }
-
-    return seconds;
+    return 0;
 }
-function observeDurationChanges() {
-    const durationContainer = document.querySelector('.playbackTimeline__duration');
-    if (!durationContainer) return;
-    const observer = new MutationObserver(() => {
-        const duration = getDuration();
-        if (duration !== null) {
-            browser.runtime.sendMessage({
-                type: 'timeline-duration-state-updated', 
-                state: duration
-            });
-        }
-    });
-    observer.observe(durationContainer, { childList: true, subtree: true });
-    // Send initial snapshot
-    const initial = getDuration();
-    if (initial !== null) {
-        browser.runtime.sendMessage({
-            type: 'timeline-duration-state-updated',
-            state: initial
-        });
-    }
-}
-// Delay until DOM is ready
-waitForElement('.playbackTimeline__duration', observeDurationChanges);
 
-let lastSentSeconds = null;
-setInterval(() => {
-    const secondsElapsed = getElapsedSeconds();
-    if (secondsElapsed !== null && secondsElapsed !== lastSentSeconds) {
-        browser.runtime.sendMessage({
-            type: 'timeline-secondsElapsed-state-updated', 
-            state: secondsElapsed
-        });
-        lastSentSeconds = secondsElapsed;
-    }
-}, 500);
 
 const clickCommandMap = {
     "playpause-toggle-command": {
@@ -266,15 +256,6 @@ browser.runtime.onMessage.addListener((msg) => {
 })
 
 
-// Helper to convert strings _:__ to seconds number
-function parseTimeString(timeStr) {
-    const parts = timeStr.split(':').map(Number);
-    if (parts.length === 2) {
-        const [minutes, seconds] = parts;
-        return minutes * 60 + seconds;
-    }
-    return 0;
-}
 // Helper for click commands
 function handleClickCommand({
     selector, 
@@ -323,7 +304,9 @@ function waitForElement(selector, callback) {
 }
 // Mutation Observers and Initial State Sync
 function setupObserver(selector, type, getStateFn) {
-    waitForElement(selector, target => {
+    function attachObserver() {
+        const target = document.querySelector(selector);
+        if (!target) return;
         // Mutation observer
         const observer = new MutationObserver(() => {
             browser.runtime.sendMessage({
@@ -331,12 +314,133 @@ function setupObserver(selector, type, getStateFn) {
                 state: getStateFn()
             });
         });
-        observer.observe(target, { attributes: true, attributeFilter: ['class'] });
+        observer.observe(target, { attributes: true, attributeFilter: ['class', 'title'] });
         // Initial State sync
         browser.runtime.sendMessage({
             type: `${type}-state-updated`,
             state: getStateFn()
         });
+        // Rebind if element removed/replace
+        const parent = target.parentNode;
+        if (parent) {
+            const removalWatcher = new MutationObserver(() => {
+                if (!document.contains(target)) {
+                    observer.disconnect();
+                    removalWatcher.disconnect();
+                    setTimeout(attachObserver, 200);
+                }
+            });
+            removalWatcher.observe(parent, { childList: true });
+        }
+    }
+    waitForElement(selector, attachObserver);
+}
+function observeSongTitle() {
+    waitForElement('.playbackSoundBadge__titleLink', el => {
+        const observer = new MutationObserver(() => {
+            const newTitle = getSongTitleFromDOM();
+            browser.runtime.sendMessage({
+                type: 'songTitle-state-updated',
+                state: newTitle
+            });
+        });
+        observer.observe(el, { childList: true, subtree: true });
+        // Initial State sync
+        browser.runtime.sendMessage({
+            type: 'songTitle-state-updated',
+            state: getSongTitleFromDOM()
+        });
+    });
+}
+function observeSongArtist() {
+    waitForElement('.playbackSoundBadge__lightLink', el => {
+        const observer = new MutationObserver(() => {
+            const newTitle = getSongArtistFromDOM();
+            browser.runtime.sendMessage({
+                type: 'songArtist-state-updated',
+                state: newTitle
+            });
+        });
+        observer.observe(el, { childList: true, subtree: true });
+        // Initial State sync
+        browser.runtime.sendMessage({
+            type: 'songArtist-state-updated',
+            state: getSongArtistFromDOM()
+        });
+    });
+}
+function startUnifiedTrackTimePoller(intervalMs = 500) {
+    waitForElement('.playbackTimeline__progressWrapper', () => {
+        let cached = { elapsed: null, duration: null };
+
+        setInterval(() => {
+            const newElapsed = getElapsedSecondsFromDOM();
+            const newDuration = getDurationFromDOM();
+
+            if (newElapsed !== cached.elapsed) {
+                cached.elapsed = newElapsed;
+                browser.runtime.sendMessage({
+                    type: 'secondsElapsed-state-updated',
+                    state: newElapsed
+                });
+            }
+            if (
+                typeof newDuration === 'number' && 
+                !isNaN(newDuration) &&
+                newDuration > 0 &&
+                newDuration !== cached.duration
+            ) {
+                cached.duration = newDuration;
+                browser.runtime.sendMessage({
+                    type: 'duration-state-updated',
+                    state: newDuration
+                });
+            }
+        }, intervalMs);
+        // Initial sync
+        const initialElapsed = getElapsedSecondsFromDOM();
+        const initialDuration = getDurationFromDOM();
+
+        cached.elapsed = initialElapsed;
+        cached.duration = initialDuration;
+
+        browser.runtime.sendMessage({ type: 'secondsElapsed-state-updated', state: initialElapsed });
+        if (
+            typeof initialDuration === 'number' &&
+            !isNaN(initialDuration) &&
+            initialDuration > 0
+        ) {
+            browser.runtime.sendMessage({
+                type: 'duration-state-updated',
+                state: initialDuration
+            })
+        }
+    });
+}
+function startLikeFollowPoller(intervalMs = 1000) {
+    waitForElement('.playbackSoundBadge__like', likeEl => {
+        let lastLike = null;
+        let lastFollow = null;
+        
+        setInterval(() => {
+            const newLike = getLikeStateFromDOM();
+            const newFollow = getFollowStateFromDOM();
+
+            if (newLike != lastLike) {
+                lastLike = newLike;
+                browser.runtime.sendMessage({
+                    type: 'like-state-updated',
+                    state: newLike
+                });
+            }
+            if (newFollow != lastFollow) {
+                lastFollow = newFollow;
+                browser.runtime.sendMessage({
+                    type: 'follow-state-updated',
+                    state: newFollow
+                });
+            }
+        }, intervalMs);
     });
 }
 setupObserver('.playControl', "playpause", getPlayPauseStateFromDOM);
@@ -344,9 +448,29 @@ setupObserver('.shuffleControl', "shuffle", getShuffleStateFromDOM);
 setupObserver('.repeatControl', "repeat", getRepeatStateFromDOM);
 setupObserver(
     '.playbackTimeline__duration span[aria-hidden="true"]',
-    "time-display",
+    "display",
     getTimeDisplayStateFromDOM
 );
-setupObserver('.playbackSoundBadge__like', "like", getLikeStateFromDOM);
-setupObserver('.playbackSoundBadge__follow', "follow", getFollowStateFromDOM);
 
+function monitorBadgeAreaAndRebind() {
+    waitForElement('.playbackSoundBadge', badgeContainer => {
+        const observer = new MutationObserver(() => {
+            scLog("[Observer] Badge area mutated, re-binding observers");
+            bindAllObservers();
+        });
+        observer.observe(badgeContainer, {
+            childList: true,
+            subtree: true,
+        });
+    });
+}
+function bindAllObservers() {
+    setupObserver('.playbackSoundBadge__avatar .sc-artwork.image__full', "avatar", getAvatarURL);
+    observeSongTitle();
+    observeSongArtist();
+}
+
+startUnifiedTrackTimePoller();
+bindAllObservers();
+monitorBadgeAreaAndRebind();
+startLikeFollowPoller();
