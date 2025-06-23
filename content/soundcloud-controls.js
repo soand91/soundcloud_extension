@@ -22,6 +22,14 @@ function scWarn(...args) {
 function scError(...args) {
   console.error("[SC Controls]", ...args); // always log errors
 }
+function debugNode(label, selector) {
+    const el = document.querySelector(selector);
+    if (el) {
+        scLog(`[${label}] Found:`, el);
+    } else {
+        scWarn(`[${label}] Not found: ${selector}`);
+    }
+}
 
 scLog("Script loaded on:", location.href);
 
@@ -303,174 +311,200 @@ function waitForElement(selector, callback) {
     else setTimeout(() => waitForElement(selector, callback), 100);
 }
 // Mutation Observers and Initial State Sync
-function setupObserver(selector, type, getStateFn) {
-    function attachObserver() {
-        const target = document.querySelector(selector);
-        if (!target) return;
-        // Mutation observer
-        const observer = new MutationObserver(() => {
-            browser.runtime.sendMessage({
-                type: `${type}-state-updated`,
-                state: getStateFn()
-            });
-        });
-        observer.observe(target, { attributes: true, attributeFilter: ['class', 'title'] });
-        // Initial State sync
-        browser.runtime.sendMessage({
-            type: `${type}-state-updated`,
-            state: getStateFn()
-        });
-        // Rebind if element removed/replace
-        const parent = target.parentNode;
-        if (parent) {
-            const removalWatcher = new MutationObserver(() => {
-                if (!document.contains(target)) {
-                    observer.disconnect();
-                    removalWatcher.disconnect();
-                    setTimeout(attachObserver, 200);
+function registerResilientStateWatcher({
+    selector, 
+    type, 
+    getState,
+    strategy = 'attribute',
+    container = '.playbackSoundBadge',
+    attributeFilter = ['class'],
+    intervalMs = 1000,
+}) {
+    let currentTarget = null;
+    let observer = null;
+    let pollInterval = null;
+    let lastState = null
+    
+    function attach() {
+        scLog(`Attempting to attach watcher for ${type}`);
+        const el = document.querySelector(selector);
+        if (!el) {
+            scWarn(`${type}: selector not found at attach time`);
+            return;
+        }
+
+        scLog(`${type}: found element, attaching observer`);
+        currentTarget = el;
+
+        // Initial state 
+        const initialState = getState();
+        lastState - initialState;
+        browser.runtime.sendMessage({ type: `${type}-state-updated`, state: initialState });
+
+        // Setup strategy
+        if (strategy === 'attribute') {
+            observer = new MutationObserver(() => {
+                scLog(`Mutation detected on ${type}`);
+                try {
+                    const newState = getState();
+                    scLog(`${type} new state:`, newState);
+                    if (newState !== lastState) {
+                        lastState = newState;
+                        browser.runtime.sendMessage({ type: `${type}-state-updated`, state: newState });
+                    }
+                } catch (err) {
+                    scError(`Error in getState for ${type}:`, err);
                 }
             });
-            removalWatcher.observe(parent, { childList: true });
+            observer.observe(el, { attributes: true, attributeFilter });
+        }
+
+        else if (strategy === 'style' || strategy === 'text') {
+            observer = new MutationObserver(() => {
+                const newState = getState();
+                if (newState !== lastState) {
+                    lastState = newState;
+                    browser.runtime.sendMessage({ type: `${type}-state-updated`, state: newState });
+                }
+            });
+            observer.observe(el, {
+                attribute: true,
+                attributeFilter: strategy === 'style' ? ['style']: undefined,
+                characterData: strategy === 'text', 
+                subtree: strategy === 'text'
+            });
+        }
+
+        else if (strategy === 'poll') {
+            pollInterval = setInterval(() => {
+                const newState = getState();
+                if (newState !== lastState) {
+                    lastState = newState; 
+                    browser.runtime.sendMessage({ type: `${type}-state-updated`, state: newState });
+                }
+            }, intervalMs);
         }
     }
-    waitForElement(selector, attachObserver);
-}
-function observeSongTitle() {
-    waitForElement('.playbackSoundBadge__titleLink', el => {
-        const observer = new MutationObserver(() => {
-            const newTitle = getSongTitleFromDOM();
-            browser.runtime.sendMessage({
-                type: 'songTitle-state-updated',
-                state: newTitle
-            });
-        });
-        observer.observe(el, { childList: true, subtree: true });
-        // Initial State sync
-        browser.runtime.sendMessage({
-            type: 'songTitle-state-updated',
-            state: getSongTitleFromDOM()
-        });
-    });
-}
-function observeSongArtist() {
-    waitForElement('.playbackSoundBadge__lightLink', el => {
-        const observer = new MutationObserver(() => {
-            const newTitle = getSongArtistFromDOM();
-            browser.runtime.sendMessage({
-                type: 'songArtist-state-updated',
-                state: newTitle
-            });
-        });
-        observer.observe(el, { childList: true, subtree: true });
-        // Initial State sync
-        browser.runtime.sendMessage({
-            type: 'songArtist-state-updated',
-            state: getSongArtistFromDOM()
-        });
-    });
-}
-function startUnifiedTrackTimePoller(intervalMs = 500) {
-    waitForElement('.playbackTimeline__progressWrapper', () => {
-        let cached = { elapsed: null, duration: null };
 
-        setInterval(() => {
-            const newElapsed = getElapsedSecondsFromDOM();
-            const newDuration = getDurationFromDOM();
+    function detach() {
+        if (observer) observer.disconnect();
+        if (pollInterval) clearInterval(pollInterval);
+        observer = null;
+        pollInterval = null;
+        currentTarget = null;
+    }
 
-            if (newElapsed !== cached.elapsed) {
-                cached.elapsed = newElapsed;
-                browser.runtime.sendMessage({
-                    type: 'secondsElapsed-state-updated',
-                    state: newElapsed
-                });
+    // Observe container for DOM reattachment
+    waitForElement(container, containerEL => {
+        const rebinder = new MutationObserver(() => {
+            const el = document.querySelector(selector);
+            if (el !== currentTarget) {
+                detach();
+                attach();
             }
-            if (
-                typeof newDuration === 'number' && 
-                !isNaN(newDuration) &&
-                newDuration > 0 &&
-                newDuration !== cached.duration
-            ) {
-                cached.duration = newDuration;
-                browser.runtime.sendMessage({
-                    type: 'duration-state-updated',
-                    state: newDuration
-                });
-            }
-        }, intervalMs);
-        // Initial sync
-        const initialElapsed = getElapsedSecondsFromDOM();
-        const initialDuration = getDurationFromDOM();
-
-        cached.elapsed = initialElapsed;
-        cached.duration = initialDuration;
-
-        browser.runtime.sendMessage({ type: 'secondsElapsed-state-updated', state: initialElapsed });
-        if (
-            typeof initialDuration === 'number' &&
-            !isNaN(initialDuration) &&
-            initialDuration > 0
-        ) {
-            browser.runtime.sendMessage({
-                type: 'duration-state-updated',
-                state: initialDuration
-            })
-        }
-    });
-}
-function startLikeFollowPoller(intervalMs = 1000) {
-    waitForElement('.playbackSoundBadge__like', likeEl => {
-        let lastLike = null;
-        let lastFollow = null;
-        
-        setInterval(() => {
-            const newLike = getLikeStateFromDOM();
-            const newFollow = getFollowStateFromDOM();
-
-            if (newLike != lastLike) {
-                lastLike = newLike;
-                browser.runtime.sendMessage({
-                    type: 'like-state-updated',
-                    state: newLike
-                });
-            }
-            if (newFollow != lastFollow) {
-                lastFollow = newFollow;
-                browser.runtime.sendMessage({
-                    type: 'follow-state-updated',
-                    state: newFollow
-                });
-            }
-        }, intervalMs);
-    });
-}
-setupObserver('.playControl', "playpause", getPlayPauseStateFromDOM);
-setupObserver('.shuffleControl', "shuffle", getShuffleStateFromDOM);
-setupObserver('.repeatControl', "repeat", getRepeatStateFromDOM);
-setupObserver(
-    '.playbackTimeline__duration span[aria-hidden="true"]',
-    "display",
-    getTimeDisplayStateFromDOM
-);
-
-function monitorBadgeAreaAndRebind() {
-    waitForElement('.playbackSoundBadge', badgeContainer => {
-        const observer = new MutationObserver(() => {
-            scLog("[Observer] Badge area mutated, re-binding observers");
-            bindAllObservers();
         });
-        observer.observe(badgeContainer, {
-            childList: true,
-            subtree: true,
-        });
-    });
-}
-function bindAllObservers() {
-    setupObserver('.playbackSoundBadge__avatar .sc-artwork.image__full', "avatar", getAvatarURL);
-    observeSongTitle();
-    observeSongArtist();
+
+        rebinder.observe(containerEL, { childList: true, subtree: true });
+        attach(); // Initial attach
+    })
 }
 
-startUnifiedTrackTimePoller();
-bindAllObservers();
-monitorBadgeAreaAndRebind();
-startLikeFollowPoller();
+registerResilientStateWatcher({ // Playpause
+    selector: '.playControl',
+    type: 'playpause',
+    getState: getPlayPauseStateFromDOM,
+    strategy: 'attribute',
+    attributeFilter: ['class']
+});
+registerResilientStateWatcher({ // Shuffle
+    selector: '.shuffleControl',
+    type: 'shuffle',
+    getState: getShuffleStateFromDOM,
+    strategy: 'attribute',
+    attributeFilter: ['class']
+});
+registerResilientStateWatcher({ // Repeat
+    selector: '.repeatControl',
+    type: 'repeat',
+    getState: getRepeatStateFromDOM,
+    strategy: 'attribute',
+    attributeFilter: ['class']
+});
+registerResilientStateWatcher({ // Like
+    selector: '.playbackSoundBadge__like',
+    type: 'like',
+    getState: getLikeStateFromDOM,
+    strategy: 'attribute',
+    attributeFilter: ['class']
+});
+registerResilientStateWatcher({ // Follow
+    selector: '.playbackSoundBadge__follow',
+    type: 'follow',
+    getState: getFollowStateFromDOM,
+    strategy: 'attribute',
+    attributeFilter: ['class']
+});
+registerResilientStateWatcher({ // Artist
+    selector: '.playbackSoundBadge__lightLink',
+    type: 'songArtist',
+    getState: getSongArtistFromDOM,
+    strategy: 'text',
+    container: '.playbackSoundBadge'
+});
+registerResilientStateWatcher({ // Title
+    selector: '.playbackSoundBadge__titleLink',
+    type: 'songTitle',
+    getState: getSongTitleFromDOM,
+    strategy: 'text',
+    container: '.playbackSoundBadge'
+});
+registerResilientStateWatcher({ // Avatar
+    selector: '.playbackSoundBadge__avatar .sc-artwork.image__full',
+    type: 'avatar',
+    getState: getAvatarURL,
+    strategy: 'style',
+    container: '.playbackSoundBadge',
+    attributeFilter: ['style']
+});
+registerResilientStateWatcher({ // secondsElapsed
+    selector: '.playbackTimeline__progressWrapper',
+    type: 'secondsElapsed',
+    getState: getElapsedSecondsFromDOM,
+    strategy: 'poll',
+    intervalMs: 500
+});
+registerResilientStateWatcher({ // Duration
+    selector: '.playbackTimeline__progressWrapper',
+    type: 'duration',
+    getState: getDurationFromDOM,
+    strategy: 'poll',
+    intervalMs: 500
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// window.addEventListener("focus", () => {
+//     scLog("[🔄 Tab Focus] Re-checking important nodes...");
+//     debugNode("Like Button", '.playbackSoundBadge__like');
+//     debugNode("Follow Button", '.playbackSoundBadge__follow');
+//     debugNode("Artist Link", '.playbackSoundBadge__lightLink');
+//     debugNode("Song Link", '.playbackSoundBadge__titleLink');
+// });
