@@ -126,7 +126,6 @@ function parseTimeString(timeStr) {
     return 0;
 }
 
-
 const clickCommandMap = {
     "playpause-toggle-command": {
         label: "Play/Pause button",
@@ -263,7 +262,6 @@ browser.runtime.onMessage.addListener((msg) => {
     }
 })
 
-
 // Helper for click commands
 function handleClickCommand({
     selector, 
@@ -306,9 +304,29 @@ function handleClickCommand({
 }
 // Helper to wait for Dynamic DOMS:
 function waitForElement(selector, callback) {
-    const el = document.querySelector(selector);
-    if (el) callback(el);
-    else setTimeout(() => waitForElement(selector, callback), 100);
+    let lastElement = null;
+    let stableCount = 0;
+    const requiredStableChecks = 3;
+    
+    const check = () => {
+        const el = document.querySelector(selector);
+        if (!el) {
+            setTimeout(check, 1000);
+            return;
+        }
+        if (el === lastElement) {
+            stableCount++;
+            if (stableCount >= requiredStableChecks) {
+                callback(el);
+                return;
+            }
+        } else {
+            stableCount = 0;
+            lastElement = el;
+        }
+        setTimeout(check, 100);
+    };
+    check();
 }
 // Mutation Observers and Initial State Sync
 function registerResilientStateWatcher({
@@ -316,7 +334,7 @@ function registerResilientStateWatcher({
     type, 
     getState,
     strategy = 'attribute',
-    container = '.playbackSoundBadge',
+    container = '.playControls__soundBadge',
     attributeFilter = ['class'],
     intervalMs = 1000,
 }) {
@@ -324,6 +342,7 @@ function registerResilientStateWatcher({
     let observer = null;
     let pollInterval = null;
     let lastState = null
+    let rebinder = null;
     
     function attach() {
         scLog(`Attempting to attach watcher for ${type}`);
@@ -333,21 +352,44 @@ function registerResilientStateWatcher({
             return;
         }
 
+        detach();
+
         scLog(`${type}: found element, attaching observer`);
         currentTarget = el;
 
         // Initial state 
         const initialState = getState();
-        lastState - initialState;
+        lastState = initialState;
         browser.runtime.sendMessage({ type: `${type}-state-updated`, state: initialState });
 
         // Setup strategy
         if (strategy === 'attribute') {
             observer = new MutationObserver(() => {
-                scLog(`Mutation detected on ${type}`);
+                setTimeout(() => {
+                    scLog(`Mutation detected on ${type}`);
+                    try {
+                        const newState = getState();
+                        scLog(`${type} new state: ${newState}, last: ${lastState}`);
+                        if (newState !== lastState) {
+                            lastState = newState;
+                            scLog(`[${type}] sending message`, {
+                                type: `${type}-state-updated`,
+                                state: newState
+                            });
+                            browser.runtime.sendMessage({ type: `${type}-state-updated`, state: newState });
+                        }
+                    } catch (err) {
+                        scError(`Error in getState for ${type}:`, err);
+                    }
+                }, 100);
+            });
+            observer.observe(el, { attributes: true, attributeFilter });
+        }
+
+        else if (strategy === 'style' || strategy === 'text') {
+            observer = new MutationObserver(() => {
                 try {
                     const newState = getState();
-                    scLog(`${type} new state:`, newState);
                     if (newState !== lastState) {
                         lastState = newState;
                         browser.runtime.sendMessage({ type: `${type}-state-updated`, state: newState });
@@ -356,19 +398,8 @@ function registerResilientStateWatcher({
                     scError(`Error in getState for ${type}:`, err);
                 }
             });
-            observer.observe(el, { attributes: true, attributeFilter });
-        }
-
-        else if (strategy === 'style' || strategy === 'text') {
-            observer = new MutationObserver(() => {
-                const newState = getState();
-                if (newState !== lastState) {
-                    lastState = newState;
-                    browser.runtime.sendMessage({ type: `${type}-state-updated`, state: newState });
-                }
-            });
             observer.observe(el, {
-                attribute: true,
+                attributes: strategy === 'style',
                 attributeFilter: strategy === 'style' ? ['style']: undefined,
                 characterData: strategy === 'text', 
                 subtree: strategy === 'text'
@@ -377,36 +408,89 @@ function registerResilientStateWatcher({
 
         else if (strategy === 'poll') {
             pollInterval = setInterval(() => {
-                const newState = getState();
-                if (newState !== lastState) {
-                    lastState = newState; 
-                    browser.runtime.sendMessage({ type: `${type}-state-updated`, state: newState });
+                try{
+                    const newState = getState();
+                    if (newState !== lastState) {
+                        lastState = newState; 
+                        browser.runtime.sendMessage({ type: `${type}-state-updated`, state: newState });
+                    }
+                } catch (err) {
+                    scError(`Error in getState for ${type}:`, err);
                 }
             }, intervalMs);
         }
     }
 
     function detach() {
-        if (observer) observer.disconnect();
-        if (pollInterval) clearInterval(pollInterval);
-        observer = null;
-        pollInterval = null;
+        if (observer) {
+            observer.disconnect();
+            observer = null;
+        }
+        if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+        }
         currentTarget = null;
     }
 
-    // Observe container for DOM reattachment
-    waitForElement(container, containerEL => {
-        const rebinder = new MutationObserver(() => {
-            const el = document.querySelector(selector);
-            if (el !== currentTarget) {
-                detach();
-                attach();
-            }
-        });
+    function init() {
+        // Observe container for DOM reattachment
+        waitForElement(container, containerEL => {
+            // Watch for the playbackSoundBadge to be added/removed/changed
+            rebinder = new MutationObserver((mutations) => {
+                let shouldReattach = false;
+                
+                mutations.forEach(mutation => {
+                    mutation.addedNodes.forEach(node => {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            // If playbackSoundBadge was added, or out target is inside it
+                            if (node.classList?.contains('playbackSoundBadge') ||
+                                node.querySelector?.('.playbackSoundBadge') ||
+                                node.querySelector?.(selector)) {
+                                    shouldReattach = true;
+                            }        
+                        }
+                    });
 
-        rebinder.observe(containerEL, { childList: true, subtree: true });
-        attach(); // Initial attach
-    })
+                    mutation.removedNodes.forEach(node => {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            // If our current target was removed
+                            if (node === currentTarget ||
+                                node.contains?.(currentTarget) ||
+                                node.classList?.contains('playbackSoundBadge')) {
+                                shouldReattach = true;
+                            }
+                        }
+                    });
+                });
+
+                if (shouldReattach) {
+                    scLog(`${type}: playbackSoundBadge changed, reattaching`);
+                    // Wait a bit for DOM to stabilize, then reattach
+                    setTimeout(() => {
+                        const newEl = document.querySelector(selector);
+                        if (newEl !== currentTarget) {
+                            attach();
+                        }
+                    }, 100);
+                }
+            });
+
+            rebinder.observe(containerEL, { childList: true, subtree: true });
+            attach(); // Initial attach
+        });
+    }
+    function cleanup() {
+        detach();
+        if (rebinder) {
+            rebinder.disconnect();
+            rebinder = null;
+        }
+    }
+
+    init();
+
+    return cleanup;
 }
 
 registerResilientStateWatcher({ // Playpause
@@ -430,41 +514,27 @@ registerResilientStateWatcher({ // Repeat
     strategy: 'attribute',
     attributeFilter: ['class']
 });
-registerResilientStateWatcher({ // Like
-    selector: '.playbackSoundBadge__like',
-    type: 'like',
-    getState: getLikeStateFromDOM,
-    strategy: 'attribute',
-    attributeFilter: ['class']
-});
-registerResilientStateWatcher({ // Follow
-    selector: '.playbackSoundBadge__follow',
-    type: 'follow',
-    getState: getFollowStateFromDOM,
-    strategy: 'attribute',
-    attributeFilter: ['class']
-});
 registerResilientStateWatcher({ // Artist
     selector: '.playbackSoundBadge__lightLink',
     type: 'songArtist',
     getState: getSongArtistFromDOM,
     strategy: 'text',
-    container: '.playbackSoundBadge'
+    container: '.playControls__soundBadge'
 });
 registerResilientStateWatcher({ // Title
     selector: '.playbackSoundBadge__titleLink',
     type: 'songTitle',
     getState: getSongTitleFromDOM,
     strategy: 'text',
-    container: '.playbackSoundBadge'
+    container: '.playControls__soundBadge'
 });
 registerResilientStateWatcher({ // Avatar
     selector: '.playbackSoundBadge__avatar .sc-artwork.image__full',
     type: 'avatar',
     getState: getAvatarURL,
     strategy: 'style',
-    container: '.playbackSoundBadge',
-    attributeFilter: ['style']
+    attributeFilter: ['style'],
+    container: '.playControls__soundBadge'
 });
 registerResilientStateWatcher({ // secondsElapsed
     selector: '.playbackTimeline__progressWrapper',
@@ -481,30 +551,166 @@ registerResilientStateWatcher({ // Duration
     intervalMs: 500
 });
 
+(() => {
+    class StateMonitor {
+        constructor({
+            containerSelector,
+            targetSelector,
+            label,
+            getStateFn,
+            onStateChange,
+            logPrefix = '[StateMonitor]',
+            quietMode = true,
+            debounceMs = 100
+        }) {
+            this.containerSelector = containerSelector;
+            this.targetSelector = targetSelector;
+            this.label = label;
+            this.getStateFn = getStateFn;
+            this.onStateChange = onStateChange;
+            this.logPrefix = logPrefix;
+            this.quietMode = quietMode;
+            this.debounceMs = debounceMs;
 
+            this.containerObserver = null;
+            this.targetObserver = null;
+            this.currentTarget = null;
+            this.lastState = null;
+            this.isRunning = false;
+            this.debounceTimer = null;
 
+            this.handleContainerMutation = this.handleContainerMutation.bind(this);
+            this.handleTargetMutation = this.handleTargetMutation.bind(this);
+        }
 
+        log(msg, data) {
+            if (!this.quietMode) {
+                console.log(`${this.logPrefix} ${msg}`, data || '');
+            }
+        }
 
+        start() {
+            const container = document.querySelector(this.containerSelector);
+            if (!container) {
+                console.warn(`${this.logPrefix} Container not found: ${this.containerSelector}`);
+                return false;
+            }
 
+            this.log(`🚀 Starting monitor for ${this.label}`);
 
+            this.containerObserver = new MutationObserver(this.handleContainerMutation);
+            this.containerObserver.observe(container, { childList: true, subtree: true });
 
+            this.attachTarget();
+            this.isRunning = true;
+            return true;
+        }
 
+        stop() {
+            this.containerObserver?.disconnect();
+            this.targetObserver?.disconnect();
+            this.containerObserver = null;
+            this.targetObserver = null;
+            this.currentTarget = null;
+            this.lastState = null;
+            this.isRunning = false;
+            this.log(`🛑 Stopped monitor for ${this.label}`);
+        }
 
+        attachTarget() {
+            clearTimeout(this.debounceTimer);
+            this.debounceTimer = setTimeout(() => {
+                const target = document.querySelector(this.targetSelector);
+                if (!target) return;
 
+                if (this.targetObserver) this.targetObserver.disconnect();
 
+                this.currentTarget = target;
+                this.lastState = this.getStateFn(target);
 
+                this.targetObserver = new MutationObserver(this.handleTargetMutation);
+                this.targetObserver.observe(target, {
+                    attributes: true,
+                    attributeFilter: ['class', 'title', 'aria-label'],
+                    attributeOldValue: true
+                });
 
+                this.log(`🎯 Attached to ${this.label} target`);
+            }, this.debounceMs);
+        }
 
+        handleContainerMutation() {
+            this.attachTarget();
+        }
 
+        handleTargetMutation() {
+            const newState = this.getStateFn(this.currentTarget);
+            if (JSON.stringify(this.lastState) !== JSON.stringify(newState)) {
+                this.lastState = newState;
+                this.onStateChange(newState);
+            }
+        }
 
+        toggleQuietMode() {
+            this.quietMode = !this.quietMode;
+            this.log(`Quiet mode ${this.quietMode ? 'ENABLED' : 'DISABLED'}`);
+        }
 
+        getStatus() {
+        return {
+            label: this.label,
+            isRunning: this.isRunning,
+            quietMode: this.quietMode,
+            currentState: this.lastState
+        };
+        }
+    }
 
+    // ✅ LIKE BUTTON INSTANCE - simplified state
+    const likeMonitor = new StateMonitor({
+        containerSelector: '.playControls__soundBadge',
+        targetSelector: '.playbackSoundBadge__like',
+        label: 'Like',
+        getStateFn: target => {
+            const isLiked = target.classList.contains('sc-button-selected');
+            return isLiked ? "liked" : "unliked";
+        },
+        onStateChange: state => {
+            const icon = state === "liked" ? '❤️' : '🤍';
+            browser.runtime.sendMessage({
+                type: "like-state-updated",
+                state: state
+            })
+            console.log(`[LikeMonitor] ${icon} ${state.toUpperCase()}`);
+        }
+    });
 
+    // ✅ FOLLOW BUTTON INSTANCE - simplified state
+    const followMonitor = new StateMonitor({
+        containerSelector: '.playControls__soundBadge',
+        targetSelector: '.playbackSoundBadge__follow',
+        label: 'Follow',
+        getStateFn: target => {
+            const isFollowing = target.classList.contains('sc-button-selected');
+            return isFollowing ? "followed" : "unfollowed";
+        },
+        onStateChange: state => {
+            const icon = state === "followed" ? '✅' : '➕';
+            browser.runtime.sendMessage({
+                type: "follow-state-updated",
+                state: state
+            })
+            console.log(`[FollowMonitor] ${icon} ${state.toUpperCase()}`);
+        }
+    });
 
-// window.addEventListener("focus", () => {
-//     scLog("[🔄 Tab Focus] Re-checking important nodes...");
-//     debugNode("Like Button", '.playbackSoundBadge__like');
-//     debugNode("Follow Button", '.playbackSoundBadge__follow');
-//     debugNode("Artist Link", '.playbackSoundBadge__lightLink');
-//     debugNode("Song Link", '.playbackSoundBadge__titleLink');
-// });
+    // 🎬 Start both
+    likeMonitor.start();
+    followMonitor.start();
+
+    // 👇 Expose for debugging
+    window.stateMonitors = {
+        likeMonitor,
+        followMonitor
+    };
+})();
