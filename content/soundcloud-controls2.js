@@ -130,10 +130,24 @@ const clickCommandMap = {
     "playpause-toggle-command": {
         label: "Play/Pause button",
         getElement: () => playBtn,
+        postClick: () => {
+            const currentState = getPlayPauseStateFromDOM();
+            browser.runtime.sendMessage({
+                type: "playpause-state-updated",
+                state: currentState
+            });
+        }
     },
     "shuffle-toggle-command": {
         label: "Shuffle button",
         getElement: () => shuffleState,
+        postClick: () => {
+            const currentState = getShuffleStateFromDOM();
+            browser.runtime.sendMessage({
+                type: "shuffle-state-updated",
+                state: currentState
+            });
+        }
     },
     "repeat-toggle-command": {
         label: "Repeat button",
@@ -167,36 +181,47 @@ const clickCommandMap = {
     "time-btn-command": {
         label: "Time display button",
         getElement: () => timeBtn,
+        postClick: () => {
+            const currentState = getTimeDisplayStateFromDOM();
+            browser.runtime.sendMessage({
+                type: "time-display-state-updated",
+                state: currentState
+            });
+        }
     },
     "avatar-click-command": {
         label: "Artist portrait link",
-        selector: ".playbackSoundBadge__avatar",
-        customElement: () => badgeArtist 
+        getElement: () => badgeArtist
     },
     "artist-click-command": {
         label: "Artist link",
-        selector: ".playbackSoundBadge__lightLink",
-        customElement: () => badgeArtist
+        getElement: () => badgeArtist
     },
     "title-click-command": {
         label: "Title link",
-        selector: ".playbackSoundBadge__titleLink",
-        customElement: () => badgeTitle
+        getElement: () => badgeTitle
     },
     "like-click-command": {
-        isComplex: true,
         label: "Like button",
-        selector: ".playbackSoundBadge__like",
-        getCurrentState: getLikeStateFromDOM,
-        desiredState: null,
-
+        getElement: () => badgeLike,
+        postClick: () => {
+            const currentState = getLikeStateFromDOM();
+            browser.runtime.sendMessage({
+                type: "like-state-updated",
+                state: currentState
+            });
+        }
     },
     "follow-click-command": {
-        isComplex: true,
-        label: "Follow button",
-        selector: ".playbackSoundBadge__follow",
-        getCurrentState: getFollowStateFromDOM,
-        desiredState: null,
+        label: "Follow button", 
+        getElement: () => badgeFollow,
+        postClick: () => {
+            const currentState = getFollowStateFromDOM();
+            browser.runtime.sendMessage({
+                type: "follow-state-updated",
+                state: currentState
+            });
+        }
     },
     "queue-click-command": { //TODO
         label: "Queue button",
@@ -220,10 +245,11 @@ browser.runtime.onMessage.addListener((msg) => {
         const config = clickCommandMap[msg.type];
         scLog(`Received ${msg.type} in SC tab`);
         try {
-            const clickFn = config.isComplex ? handleComplexClickCommand : handleClickCommand;
-            clickFn({
-                ...config, 
+            handleClickCommand({
+                label: config.label,
                 customElement: config.getElement?.(),
+                selector: config.selector,
+                postClick: config.postClick,
                 msg
             });
         } catch (e) {
@@ -272,60 +298,6 @@ function handleClickCommand({
             setTimeout(tryClick, intervalMs);
         } else {
             scError(`${label} not found or not interactable after ${maxAttempts} attempts`);
-        }
-    }
-    tryClick();
-}
-// Helper for complex click commands
-function handleComplexClickCommand({
-    selector, 
-    label,
-    desiredState = null,
-    getCurrentState = null,
-    shouldClick = null,
-    maxAttempts = 10,
-    intervalMs = 500,
-    postClick = null,
-    msg = null
-}) {
-    scLog(`[Complex] Looking for ${label}...`);
-    let attempts = 0;
-
-    function simulateRealClick(el) {
-        const events = ["mousedown", "mouseup", "click"];
-        events.forEach(type => {
-            el.dispatchEvent(new MouseEvent(type, {
-                bubbles: true,
-                cancelable: true,
-                view: window
-            }));
-        });
-        scLog(`[Complex] ${label} fully clicked (${events.join(", ")})`);
-    }
-    
-    function tryClick() {
-        const el = document.querySelector(selector);
-        const ready = el && el.offsetParent !== null;
-
-        if (ready) {
-            const currentState = getCurrentState?.();
-            const shouldProceed = shouldClick
-                ? shouldClick({ el, currentState, msg })
-                : desiredState
-                    ? currentState !== desiredState
-                    : true;
-            if (!shouldProceed) {
-                scLog(`[Complex] ${label} already in desired state: ${currentState}`)
-                return;
-            }
-            simulateRealClick(el);
-            if (postClick) {
-                setTimeout(() => postClick(msg), 100);
-            }
-        } else if (++attempts < maxAttempts) {
-            setTimeout(tryClick, intervalMs);
-        } else {
-            scError(`[Complex] ${label} not found or not clickable after ${maxAttempts} attempts`);
         }
     }
     tryClick();
@@ -579,7 +551,6 @@ registerResilientStateWatcher({ // Duration
     intervalMs: 500
 });
 
-// Observers for Like & Follow only
 (() => {
     class StateMonitor {
         constructor({
