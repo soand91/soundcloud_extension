@@ -312,7 +312,7 @@ function setupButtonListeners(root) {
     const repeat        = root.querySelector('.repeat');
     const skipPrevBtn   = root.querySelector('.skip_prev');
     const skipNextBtn   = root.querySelector('.skip_next');
-    const close_btn     = root.querySelector('.collapse-btn');
+    const close_btn     = root.querySelector('.int-icon');
     const open_icon     = root.querySelector('.ext-icon');
     const timeBtn       = root.querySelector('.timeDuration');
     const badgeAvatar   = root.querySelector('.soundBadge_avatar');
@@ -355,17 +355,24 @@ function setupButtonListeners(root) {
             const nextIndex = (currentIndex + 1) % states.length;
             const nextState = states[nextIndex];
             try {
-                const response = await browser.runtime.sendMessage({
+                browser.runtime.sendMessage({
                     type: "repeat-toggle-request",
                     state: nextState
                 });
-                if (response && response.success) {
-                    log("repeat-toggle-request succeeded")
-                    repeat.classList.remove(...states);
-                    repeat.classList.add(nextState);
-                } else {
-                    warn("repeat-toggle-request failed or was ignored.")
-                }
+                repeat.classList.remove(...states);
+                repeat.classList.add(nextState);
+
+                // const response = await browser.runtime.sendMessage({
+                //     type: "repeat-toggle-request",
+                //     state: nextState
+                // });
+                // if (response && response.success) {
+                //     log("repeat-toggle-request succeeded")
+                //     repeat.classList.remove(...states);
+                //     repeat.classList.add(nextState);
+                // } else {
+                //     warn("repeat-toggle-request failed or was ignored.")
+                // }
             } catch (err) {
                 error('Repeat toggle failed:', err);
             } 

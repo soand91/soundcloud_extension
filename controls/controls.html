@@ -1,7 +1,19 @@
 <div class="controller">
     <section class="controller_inner">
+        <div class="int-icon">☰</div>
         <div class="controller_wrapper">
-            <div class="controller_queue"></div>
+            <div class="controller_queue">
+                <div class="queue_wrapper">
+                    <div class="queue_topBar">
+                        <div class="queue_title">Next Up</div>
+                        <button class="queue_clear">Clear</button>
+                        <button class="queue_hide">
+                            <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6.94 8l-4.47 4.47 1.06 1.06L8 9.06l4.47 4.47 1.06-1.06L9.06 8l4.47-4.47-1.06-1.06L8 6.94 3.53 2.47 2.47 3.53 6.94 8z" fill="currentColor"></path></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="queue_list"></div>
+            </div>
             <div class="controller_elements">
                 <button class="skip_prev control_buttons">
                     <div class="svg-wrap">
@@ -67,7 +79,6 @@
                         </div>
                     </div>
                 </div>
-
                 <div class="volume">
                     <div class="volume_button_wrapper">
                         <button class="volume_button">
@@ -83,10 +94,8 @@
                         <div class="volume_sliderHandle" style="top: 116.8px;"></div>
                     </div>
                 </div>
-
                 <div class="soundBadge">
                     <div class="soundBadge_avatar">
-                        <!--TODO ADD IMAGE-->
                     </div>
                     <div class="soundBadge_title_container">
                         <div class="artistLink">10cust</div>

@@ -1,4 +1,14 @@
 document.addEventListener('DOMContentLoaded', async() => {
+    const fontBlob = await fetch(browser.runtime.getURL('controls/Inter-SemiBold.woff'))
+        .then(r => r.blob());
+    const fontUrl = URL.createObjectURL(fontBlob);
+    const fontFace = new FontFace('Inter', `url(${fontUrl})`, {
+        weight: 600,
+        style: 'normal',
+        display: 'swap'
+    });
+    await fontFace.load();
+    document.fonts.add(fontFace);
     // Query for all open SoundCloud tabs
     browser.runtime.sendMessage({ type: "get-soundcloud-tabs" }, response => {
         const tabListElem = document.getElementById('tab-list');

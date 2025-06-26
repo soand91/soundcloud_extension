@@ -37,12 +37,14 @@ scLog("Script loaded on:", location.href);
 function getPlayPauseStateFromDOM() {
     return playBtn.classList.contains('playing') ? "playing" : "paused";
 }
-function getShuffleStateFromDOM() {
-    return shuffleState.classList.contains('m-shuffling') ? "active" : "inactive";
+function getShuffleStateFromDOM(el) {
+    el = el ?? document.querySelector('.shuffleControl');
+    return el?.classList.contains('m-shuffling') ? "active" : "inactive";
 }
-function getRepeatStateFromDOM() {
-    if (repeatState.classList.contains('m-one')) return 'one';
-    if (repeatState.classList.contains('m-all')) return 'all';
+function getRepeatStateFromDOM(el) {
+    el = el ?? document.querySelector('.repeatControl');
+    if (el?.classList.contains('m-one')) return 'one';
+    if (el?.classList.contains('m-all')) return 'all';
     return 'off'
 }
 function getTimeDisplayStateFromDOM() {
@@ -55,17 +57,13 @@ function getTimeDisplayStateFromDOM() {
     const text = timeSpan.textContent.trim();
     return text.startsWith("-") ? "remaining" : "duration";
 }
-function getLikeStateFromDOM() {
-    const title = badgeLike?.getAttribute("title") || "";
-    if (title.includes("Unlike")) return "liked";
-    if (title.includes("Like")) return "unliked";
-    return "unknown"
+function getLikeStateFromDOM(el) {
+    el = el ?? document.querySelector('.playbackSoundBadge__like')
+    return el?.classList.contains('sc-button-selected') ? "liked" : "unliked"
 }
-function getFollowStateFromDOM() {
-    const title = badgeFollow?.getAttribute("title") || "";
-    if (title.includes("Unfollow")) return "followed";
-    if (title.includes("Follow")) return "unfollowed";
-    return "unknown"
+function getFollowStateFromDOM(el) {
+    el = el ?? document.querySelector('.playbackSoundBadge__follow')
+    return el?.classList.contains('sc-button-selected') ? "followed" : "unfollowed"
 }
 function getQueueStateFromDOM() { //TODO
     const title = badgeQueue?.getAttribute("title") || "";
@@ -138,22 +136,42 @@ const clickCommandMap = {
     "repeat-toggle-command": {
         label: "Repeat button",
         getElement: () => repeatState,
-        postClick: (msg) => {
-            const desiredState = msg.state; // "off", "one", or "all"
+        postClick: async (msg) => {
+            const desiredState = msg.state;
             const states = ['off', 'one', 'all'];
             let currentState = getRepeatStateFromDOM();
             let safety = 0;
-            // Cycle until reaching desired state and prevent infinite loop
+
+            const waitForStateChange = async (expectedState) => {
+                // Try requestAnimationFrame first (fastest for visual updates)
+                await new Promise(resolve => requestAnimationFrame(resolve));
+                
+                let newState = getRepeatStateFromDOM();
+                if (newState === expectedState) return newState;
+
+                // Fall back to short polling if RAF wasn't enough
+                for (let i = 0; i < 10; i++) {
+                    await new Promise(resolve => setTimeout(resolve, 5));
+                    newState = getRepeatStateFromDOM();
+                    if (newState === expectedState) return newState;
+                }
+
+                return newState; // Return whatever state we have
+            };
+
             while (currentState !== desiredState && safety < states.length) {
+                const nextStateIndex = (states.indexOf(currentState) + 1) % states.length;
+                const expectedNextState = states[nextStateIndex];
+                
                 repeatState.click();
-                currentState = getRepeatStateFromDOM();
+                currentState = await waitForStateChange(expectedNextState);
                 safety++;
             }
-            // Report the new state back to the background.js 
+
             browser.runtime.sendMessage({
                 type: "repeat-state-updated",
                 state: currentState
-            })
+            });
         }
     },
     "skip-prev-command": {
@@ -528,20 +546,6 @@ registerResilientStateWatcher({ // Playpause
     strategy: 'attribute',
     attributeFilter: ['class']
 });
-registerResilientStateWatcher({ // Shuffle
-    selector: '.shuffleControl',
-    type: 'shuffle',
-    getState: getShuffleStateFromDOM,
-    strategy: 'attribute',
-    attributeFilter: ['class']
-});
-registerResilientStateWatcher({ // Repeat
-    selector: '.repeatControl',
-    type: 'repeat',
-    getState: getRepeatStateFromDOM,
-    strategy: 'attribute',
-    attributeFilter: ['class']
-});
 registerResilientStateWatcher({ // Artist
     selector: '.playbackSoundBadge__lightLink',
     type: 'songArtist',
@@ -664,7 +668,7 @@ registerResilientStateWatcher({ // Duration
                     attributeOldValue: true
                 });
 
-                this.log(`🎯 Attached to ${this.label} target`);
+                this.log(`Attached to ${this.label} target`);
             }, this.debounceMs);
         }
 
@@ -695,15 +699,42 @@ registerResilientStateWatcher({ // Duration
         }
     }
 
-    // ✅ LIKE BUTTON INSTANCE - simplified state
+    // SHUFFLE BUTTON INSTANCE 
+    const shuffleMonitor = new StateMonitor({
+        containerSelector: '.playControls__control',
+        targetSelector: '.shuffleControl',
+        label: 'Shuffle',
+        getStateFn: getShuffleStateFromDOM,
+        onStateChange: state => {
+            browser.runtime.sendMessage({
+                type: "shuffle-state-updated",
+                state: state
+            });
+            console.log(`[ShuffleMonitor] ${state.toUpperCase()}`)
+        }
+    });
+    
+    // REPEAT BUTTON INSTANCE
+    const repeatMonitor = new StateMonitor({
+        containerSelector: '.playControls__control',
+        targetSelector: '.repeatControl',
+        label: 'Repeat',
+        getStateFn: getRepeatStateFromDOM,
+        onStateChange: state => {
+            browser.runtime.sendMessage({
+                type: "repeat-state-updated",
+                state: state
+            })
+            console.log(`[RepeatMonitor] ${state.toUpperCase()}`)            
+        }
+    })
+
+    // LIKE BUTTON INSTANCE - simplified state
     const likeMonitor = new StateMonitor({
         containerSelector: '.playControls__soundBadge',
         targetSelector: '.playbackSoundBadge__like',
         label: 'Like',
-        getStateFn: target => {
-            const isLiked = target.classList.contains('sc-button-selected');
-            return isLiked ? "liked" : "unliked";
-        },
+        getStateFn: getLikeStateFromDOM,
         onStateChange: state => {
             const icon = state === "liked" ? '❤️' : '🤍';
             browser.runtime.sendMessage({
@@ -714,15 +745,12 @@ registerResilientStateWatcher({ // Duration
         }
     });
 
-    // ✅ FOLLOW BUTTON INSTANCE - simplified state
+    // FOLLOW BUTTON INSTANCE - simplified state
     const followMonitor = new StateMonitor({
         containerSelector: '.playControls__soundBadge',
         targetSelector: '.playbackSoundBadge__follow',
         label: 'Follow',
-        getStateFn: target => {
-            const isFollowing = target.classList.contains('sc-button-selected');
-            return isFollowing ? "followed" : "unfollowed";
-        },
+        getStateFn: getFollowStateFromDOM,
         onStateChange: state => {
             const icon = state === "followed" ? '✅' : '➕';
             browser.runtime.sendMessage({
@@ -733,11 +761,13 @@ registerResilientStateWatcher({ // Duration
         }
     });
 
-    // 🎬 Start both
+    // Start both
+    shuffleMonitor.start();
+    repeatMonitor.start();
     likeMonitor.start();
     followMonitor.start();
 
-    // 👇 Expose for debugging
+    // Expose for debugging
     window.stateMonitors = {
         likeMonitor,
         followMonitor

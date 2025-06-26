@@ -1,6 +1,7 @@
 .controller {
     font-family: "Inter";
     font-weight: 600;
+    font-size: 14px;
     position: fixed;
     bottom: 0;
     left: 0;
@@ -30,15 +31,6 @@
     height: 100%;
     min-width: 1080px;
     max-width: 1240px;
-}
-.controller_queue {
-    position: absolute;
-    bottom: 56px;
-    right: 0;
-    width: 480px;
-    opacity: 0;
-    height: 530px;
-    max-height: calc(100vh - 80px);
 }
 .controller_elements {
     display: flex;
@@ -152,21 +144,25 @@
 .playing .pause { display: inline; }
 .icon { display: none; }
 
-.ext-icon {
+.ext-icon, .int-icon {
     position: fixed; 
     bottom: 0; left: 0;
     margin: 12px;
     width: 24px; height: 24px;
-    background: black;
+    background: #303030;
     z-index: 999999;
     display: flex; align-items: center; justify-content: center;
     color: white;
     font-size: 0.85em;
-    transition: opacity 0.3s; 
+    transition: opacity 1s; 
     opacity: 0; pointer-events: none;
 }
 .ext-icon.ext-shown {
-    opacity: 1; pointer-events: auto;
+    opacity: 1; pointer-events: auto; cursor: pointer;
+}
+.int-icon {
+    position: absolute;
+    opacity: 1; pointer-events: auto; cursor: pointer;
 }
 
 /* TIMELINE STARTS HERE */
@@ -360,4 +356,72 @@
 .soundBadge_queue {
     margin-right: 0; padding: 4px 0;
     padding-left: 8px;
+}
+
+
+.controller_queue {
+    position: absolute;
+    bottom: 56px;
+    right: 16px;
+    width: 480px;
+    /* opacity: 0; */
+    height: 530px;
+    max-height: calc(100vh - 80px);
+    background-color: rgb(18, 18, 18);
+    color: white;
+}
+.controller_queue {
+    opacity: 1;
+}
+.queue_wrapper {
+   position: relative;
+   border: 1px solid #303030;
+   border-radius: 6px; 
+}
+.queue_topBar {
+    outline: 1px dashed red;
+    width: 480px; height: 64px;
+    display: flex; box-sizing: border-box;
+    padding: 16px;
+    padding-bottom: 8px;
+}
+.queue_title {
+    cursor: pointer; 
+    flex-grow: 1;
+    font-size: 22px; line-height: 28px;
+    padding: 8px 16px;
+}
+.queue_clear, .queue_hide {
+    border: none;
+    cursor: pointer; align-self: center;
+    padding: 6px;
+    background-color: initial; color: white;
+}
+.queue_clear {
+    padding-left: 12px; padding-right: 12px;
+    font-size: 14px; line-height: 20px;
+}
+.queue_hide {
+    padding: 6px; margin-right: 16px;
+    min-width: 24px; min-height: 24px;
+    border-radius: 50%; background-color: #303030; 
+}
+.queue_hide svg {
+    width: 24px; height: 24px;
+}
+
+
+
+
+
+
+
+.queue_list {
+    outline: 1px dashed green;
+    overflow: hidden;
+    position: absolute;
+    display: inline-block; box-sizing: border-box;
+    top: 60px; left: 0px; bottom: 0;
+    width: 480px; 
+    border-radius: 0 0 4px 4px;
 }
