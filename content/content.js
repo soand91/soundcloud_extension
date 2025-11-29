@@ -355,9 +355,15 @@ function startInterpolatedTimelineLoop(root) {
     requestAnimationFrame(loop)
 }
 function applySettingsToAllTabs(settings) {
-    applyStartOpenSetting(!!settings['start-open-toggle']);
-    applyActiveTabSetting(!!settings['active-tab-toggle']);
-    applyThemeSetting(!!settings['theme-default-toggle']);
+    if (settings && Object.prototype.hasOwnProperty.call(settings, 'start-open-toggle')) {
+        applyStartOpenSetting(!!settings['start-open-toggle']);
+    }
+    if (settings && Object.prototype.hasOwnProperty.call(settings, 'active-tab-toggle')) {
+        applyActiveTabSetting(!!settings['active-tab-toggle']);
+    }
+    if (settings && Object.prototype.hasOwnProperty.call(settings, 'theme-default-toggle')) {
+        applyThemeSetting(!!settings['theme-default-toggle']);
+    }
 }
 function applyStartOpenSetting(startOpen) {
     const controller = shadowRoot.querySelector('.controller');

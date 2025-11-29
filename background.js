@@ -59,7 +59,7 @@ async function applySettingsToAllTabs(settings) {
                 bgWarn(`[Settings] Skipped tab ${tab.id} - content script not available`);
             });
         }
-        bgLog(`[Settings] Broadcast attemp to ${tabs.length} tabs`)
+        bgLog(`[Settings] Broadcast attempt to ${tabs.length} tabs`)
     })
 }
 // Helper that detects all already-open SoundCloud tabs 
@@ -393,13 +393,17 @@ browser.tabs.onRemoved.addListener((tabId) => {
 /// ======== Storage Events ========
 // Update settings when popup changes settings
 browser.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local') return;
-    for (const [key, { oldValue, newValue }] of Object.entries(changes)) {
+    if (area !== "local") return;
+    const partial = {};
+    for (const [key, { newValue }] of Object.entries(changes)) {
         if (SETTINGS_KEYS.includes(key)) {
-            applySettingsToAllTabs();
-            bgLog(`[Settings Change] ${key}:`, oldValue, "→", newValue);
+            partial[key] = newValue;
         }
     }
+    if (Object.keys(partial).length === 0) return;
+
+    applySettingsToAllTabs(partial);
+    bgLog("[Settings Change] Applied partial settings:", partial);
 })
 
 
@@ -786,3 +790,4 @@ function updateTabState(tabId, partialState, { force = false, suppressTimeStamp 
 
     return true;
 }
+
