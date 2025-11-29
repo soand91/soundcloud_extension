@@ -6,6 +6,14 @@ let cachedDuration = 0;
 let lastUpdateTime = 0;
 let rafId = null;
 let shadowRoot = null;
+let teardownScrollbarListener = null;
+let teardownVolumeListener = null;
+let volumeState = {
+    percent: 0.6,
+    lastPercent: 0.6,
+    lastNonZeroPercent: 0.6,
+    muted: false
+};
 
 const DEBUG = true;
 function log(...args) {
@@ -22,6 +30,7 @@ function error(...args) {
 window.addEventListener('DOMContentLoaded', async () => { //! May have to remove the DOM waiter
     log("DOM fully loaded. Initializing toolbar...");
     shadowRoot = await injectToolbar();             // 1. Build the Shadow DOM
+    setupScrollbarGutter(shadowRoot);               // 1b. Track page scrollbar width
     log("Toolbar injected. Waiting for buttons...");
     await waitForButtons(shadowRoot);               // 2. Ensure buttons exist
     log("Buttons ready. Syncing extension settings...");
@@ -109,6 +118,21 @@ function waitForButtons(root) {
         check();
     });
 }
+/// ======== Scrollbar Width Sync (host -> CSS var) ========
+function setupScrollbarGutter(root) {
+    if (!root?.host) return;
+    const host = root.host;
+
+    const updateScrollbarVar = () => {
+        const scrollbarWidth = Math.max(window.innerWidth - document.documentElement.clientWidth, 0);
+        host.style.setProperty('--page-scrollbar', `${scrollbarWidth}px`);
+    };
+
+    updateScrollbarVar();
+    const resizeListener = () => updateScrollbarVar();
+    window.addEventListener('resize', resizeListener);
+    teardownScrollbarListener = () => window.removeEventListener('resize', resizeListener);
+}
 
 /// ======== Sync All States from [background.js] ========
 async function syncAllStates() {
@@ -116,6 +140,8 @@ async function syncAllStates() {
     const response = await browser.runtime.sendMessage({ type: "get-all-states-active" });
     const elapsed = response.secondsElapsed ?? 0;
     const duration = response.duration ?? 0;
+    const volume = response.volume ?? 1;
+    const muted = !!response.muted;
 
     log("Full raw response from background:", response);
     if (!response) {
@@ -133,6 +159,7 @@ async function syncAllStates() {
     setAvatarUI(response.avatar, shadowRoot);
 
     setTimelineUI(elapsed, duration, shadowRoot);
+    setVolumeUI({ percent: volume, muted }, shadowRoot);
 }
 
 /// ======== Sync All Settings from [background.js] ========
@@ -207,6 +234,44 @@ function setArtistUI(state, root) {
     const container = root.querySelector('.artistLink');
     if (!container) return;
     container.innerHTML = state ?? '';
+}
+function setVolumeUI({ percent = 0, muted = false }, root) {
+    const slider = root.querySelector('.volume_slider');
+    const track = root.querySelector('.volume_sliderBackground');
+    const progress = root.querySelector('.volume_sliderProgress');
+    const handle = root.querySelector('.volume_sliderHandle');
+    const button = root.querySelector('.volume_button');
+
+    if (!slider || !track || !progress || !handle || !button) return;
+
+    const clamp = (v) => Math.max(0, Math.min(1, v));
+    const clamped = clamp(percent);
+    const sliderRect = slider.getBoundingClientRect();
+    const trackRect = track.getBoundingClientRect();
+    const trackHeight = trackRect.height || 1;
+    const trackOffsetTop = trackRect.top - sliderRect.top;
+
+    log("[Volume] Applying UI", { clamped, muted });
+
+    // Persist local state
+    volumeState.percent = clamped;
+    if (clamped > 0) {
+        volumeState.lastPercent = clamped;
+        volumeState.lastNonZeroPercent = clamped;
+    }
+    volumeState.muted = muted || clamped === 0;
+
+    progress.style.height = `${clamped * trackHeight}px`;
+    const handleTop = trackOffsetTop + (1 - clamped) * trackHeight - (handle.offsetHeight / 2);
+    handle.style.top = `${handleTop}px`;
+    slider.dataset.volumePercent = clamped.toFixed(3);
+    slider.classList.toggle('muted', volumeState.muted);
+    button.classList.toggle('muted', volumeState.muted);
+
+    const level = volumeState.muted ? 'mute' : (clamped <= 0.5 ? 'low' : 'high');
+    button.dataset.level = level;
+    button.classList.remove('vol-low', 'vol-high', 'vol-mute');
+    button.classList.add(level === 'low' ? 'vol-low' : level === 'high' ? 'vol-high' : 'vol-mute');
 }
 function setAvatarUI(url, root) {
     const el = root.querySelector('.soundBadge_avatar');
@@ -321,6 +386,7 @@ function setupButtonListeners(root) {
     const badgeLike     = root.querySelector('.soundBadge_like');
     const badgeFollow   = root.querySelector('.soundBadge_follow');
     const badgeQueue    = root.querySelector('.soundBadge_queue');
+    const volumeSlider  = root.querySelector('.volume_slider');
 
     async function sendSimpleRequest(type, maxRetries = 3) {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -347,6 +413,9 @@ function setupButtonListeners(root) {
     if (badgeLike)   {badgeLike.addEventListener('click', () => sendSimpleRequest('like-request'))};
     if (badgeFollow) {badgeFollow.addEventListener('click', () => sendSimpleRequest('follow-request'))};
     if (badgeQueue)  {badgeQueue.addEventListener('click', () => sendSimpleRequest('queue-request'))};
+    if (volumeSlider) {
+        setupVolumeSlider(root);
+    }
 
     if (repeat) {
         repeat.addEventListener('click', async () => {
@@ -443,6 +512,12 @@ function setupMessageListeners() {
             log("Single state:", msg.type, msg.state)
             stateHandlers[msg.type](msg.state, shadowRoot);
         }
+        // Volume updates (structured object)
+        if (msg.type === "volume-state-updated") {
+            const state = msg.state || {};
+            log("[Volume] Incoming volume-state-updated", state);
+            setVolumeUI({ percent: state.percent ?? 0, muted: !!state.muted }, shadowRoot);
+        }
         // When it is a settings update
         if (msg.type === "settings-updated" && msg.settings) {
             
@@ -457,4 +532,178 @@ function formatTime(seconds) {
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
     return `${m}:${s.toString().padStart(2, '0')}`;
+}
+/// ======== Volume Slider (UI only) ========
+function setupVolumeSlider(root) {
+    const slider = root.querySelector('.volume_slider');
+    const track = root.querySelector('.volume_sliderBackground');
+    const progress = root.querySelector('.volume_sliderProgress');
+    const handle = root.querySelector('.volume_sliderHandle');
+    const button = root.querySelector('.volume_button');
+    const iconLow = button?.querySelector('.vol-icon-low');
+    const iconHigh = button?.querySelector('.vol-icon-high');
+    const iconMute = button?.querySelector('.vol-icon-mute');
+    if (!slider || !track || !progress || !handle || !button) return;
+
+    let dragging = false;
+    let pointerId = null;
+    let observer = null;
+    let lastSendTime = 0;
+    const SEND_THROTTLE_MS = 60;
+
+    const clamp = (v) => Math.max(0, Math.min(1, v));
+
+    const getTrackMetrics = () => {
+        const sliderRect = slider.getBoundingClientRect();
+        const trackRect = track.getBoundingClientRect();
+        return {
+            trackHeight: trackRect.height || 1,
+            trackOffsetTop: trackRect.top - sliderRect.top,
+            trackTop: trackRect.top
+        };
+    };
+
+    const percentFromClientY = (clientY) => {
+        const { trackHeight, trackTop, trackOffsetTop } = getTrackMetrics();
+        const yWithinTrack = clientY - trackTop;
+        const percent = 1 - (yWithinTrack / trackHeight);
+        return {
+            percent: clamp(percent),
+            trackHeight,
+            trackOffsetTop
+        };
+    };
+
+    const applyPercent = ({ percent, trackHeight, trackOffsetTop }, { muted = false, skipSend = false } = {}) => {
+        const clamped = clamp(percent);
+        volumeState.percent = clamped;
+        if (clamped > 0) {
+            volumeState.lastPercent = clamped;
+            volumeState.lastNonZeroPercent = clamped;
+        }
+        progress.style.height = `${clamped * trackHeight}px`;
+        const handleTop = trackOffsetTop + (1 - clamped) * trackHeight - (handle.offsetHeight / 2);
+        handle.style.top = `${handleTop}px`;
+        slider.dataset.volumePercent = clamped.toFixed(3);
+        slider.classList.toggle('muted', muted);
+        button.classList.toggle('muted', muted);
+        syncButtonFromSlider();
+        if (!skipSend) {
+            maybeSendVolume(clamped, muted);
+        }
+    };
+
+    const syncButtonFromSlider = () => {
+        const percentVal = parseFloat(slider.dataset.volumePercent || "0");
+        const muted = slider.classList.contains('muted') || isNaN(percentVal) || percentVal <= 0;
+        const level = muted ? 'mute' : (percentVal <= 0.5 ? 'low' : 'high');
+        button.dataset.level = level;
+        button.classList.remove('vol-low', 'vol-high', 'vol-mute');
+        button.classList.add(level === 'low' ? 'vol-low' : level === 'high' ? 'vol-high' : 'vol-mute');
+        if (iconLow && iconHigh && iconMute) {
+            iconLow.hidden = level !== 'low';
+            iconHigh.hidden = level !== 'high';
+            iconMute.hidden = level !== 'mute';
+        }
+    };
+
+    const maybeSendVolume = (percent, muted) => {
+        const now = Date.now();
+        if (now - lastSendTime < SEND_THROTTLE_MS) return;
+        lastSendTime = now;
+        log("[Volume] Sending volume-set-request", { percent, muted });
+        browser.runtime.sendMessage({
+            type: "volume-set-request",
+            percent,
+            muted
+        });
+    };
+
+    const setPercent = (percent) => {
+        const metrics = getTrackMetrics();
+        const clamped = clamp(percent);
+        volumeState.percent = clamped;
+        volumeState.lastPercent = clamped;
+        volumeState.muted = false;
+        applyPercent({ ...metrics, percent: clamped }, { muted: false });
+    };
+
+    const toggleMute = () => {
+        const metrics = getTrackMetrics();
+        const currentPercent = parseFloat(slider.dataset.volumePercent || "0");
+        const isCurrentlyMuted = slider.classList.contains('muted') || currentPercent <= 0;
+
+        if (isCurrentlyMuted) {
+            const target = volumeState.lastNonZeroPercent || 0.6;
+            volumeState.muted = false;
+            applyPercent({ ...metrics, percent: target }, { muted: false, skipSend: true });
+            log("[Volume] Sending volume-mute-toggle-request (unmute)");
+            browser.runtime.sendMessage({ type: "volume-mute-toggle-request" });
+        } else {
+            volumeState.muted = true;
+            applyPercent({ ...metrics, percent: 0 }, { muted: true, skipSend: true });
+            log("[Volume] Sending volume-mute-toggle-request (mute)");
+            browser.runtime.sendMessage({ type: "volume-mute-toggle-request" });
+        }
+    };
+
+    const onPointerMove = (e) => {
+        if (!dragging || e.pointerId !== pointerId) return;
+        const metrics = percentFromClientY(e.clientY);
+        volumeState.muted = false;
+        applyPercent(metrics, { muted: false });
+        e.preventDefault();
+    };
+
+    const endDrag = (e) => {
+        if (e.pointerId !== pointerId) return;
+        dragging = false;
+        pointerId = null;
+        window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerup', endDrag);
+        window.removeEventListener('pointercancel', endDrag);
+    };
+
+    const onPointerDown = (e) => {
+        if (e.button !== 0) return; // left click only
+        dragging = true;
+        pointerId = e.pointerId;
+        const metrics = percentFromClientY(e.clientY);
+        volumeState.muted = false;
+        applyPercent(metrics, { muted: false });
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', endDrag);
+        window.addEventListener('pointercancel', endDrag);
+        e.preventDefault();
+    };
+
+    const onButtonClick = (e) => {
+        toggleMute();
+        e.preventDefault();
+    };
+
+    button.addEventListener('click', onButtonClick);
+    slider.addEventListener('pointerdown', onPointerDown);
+
+    // Initialize UI state
+    const initialMetrics = getTrackMetrics();
+    const initialPercent = volumeState.muted ? 0 : (volumeState.percent ?? 0.6);
+    applyPercent({ ...initialMetrics, percent: initialPercent }, { muted: volumeState.muted, skipSend: true });
+    syncButtonFromSlider();
+
+    // Keep button in sync if data-volume-percent changes externally
+    observer = new MutationObserver(syncButtonFromSlider);
+    observer.observe(slider, { attributes: true, attributeFilter: ['data-volume-percent', 'class'] });
+
+    teardownVolumeListener = () => {
+        slider.removeEventListener('pointerdown', onPointerDown);
+        button.removeEventListener('click', onButtonClick);
+        window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerup', endDrag);
+        window.removeEventListener('pointercancel', endDrag);
+        if (observer) {
+            observer.disconnect();
+            observer = null;
+        }
+    };
 }

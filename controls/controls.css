@@ -24,7 +24,8 @@
 }
 .controller_wrapper {
     margin: 0 auto;
-    padding: 0 16px;
+    padding-inline-start: 16px;
+    padding-inline-end: calc(16px + var(--page-scrollbar, 0px));
     box-sizing: border-box;
     visibility: visible;
     position: relative;
@@ -238,26 +239,56 @@
     margin: 0; padding: 16px 4px;
     min-width: 24px; min-height: 24px;
     border: none; cursor: pointer;
-    background-color: #303030; color: #fff;
+    background: transparent; color: #fff;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: color 0.2s ease, transform 0.12s ease;
+}
+.volume_button svg {
+    display: none !important;
+    width: 16px;
+    height: 16px;
+}
+.volume_button.vol-low .vol-icon-low,
+.volume_button.vol-high .vol-icon-high,
+.volume_button.vol-mute .vol-icon-mute {
+    display: block !important;
 }
 .volume_button:hover {
-    color: rgba(255, 255, 255, 0.15);
+    color: gray;
+}
+.volume_button.muted {
+    color: #f50;
+}
+.volume_button:active {
+    transform: translateY(1px);
 }
 .volume_slider {
     position: absolute; cursor: pointer;
     left: -9px; bottom: 50px;
     width: 40px; height: 152px;
-    border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 4px;
-    overflow: initial; z-index: 2147483647; outline: 0;
+    border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 6px;
+    background: #303030;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+    overflow: visible; z-index: 2147483647; outline: 0;
 
-    transition: height 0.1s; transform: translateZ(0);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(6px) scale(0.98);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.volume:hover .volume_slider,
+.volume:focus-within .volume_slider,
+.volume_slider:hover {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
 }
 .volume_sliderBackground {
     position: absolute; display: block;
     margin-left: 18px;
     left: 0; bottom: 13px;
     width: 4px; height: 120px;
-    background-color: #303030;
+    background-color: #1f1f1f;
 
     opacity: 1; 
     transition: opacity 0.1s linear; transition-delay: 0.1s;
@@ -267,20 +298,49 @@
     margin-left: 18px;
     bottom: 13px;
     width: 4px; 
-    background-color: #fff;
+    background-color: #f50;
 
     opacity: 1;
     transition: opacity 0.1s linear; transition-delay: 0.1s;
+}
+.volume_slider.muted .volume_sliderProgress {
+    background-color: #777;
 }
 .volume_sliderHandle {
     position: absolute; display: block;
     margin-left: 12px; box-sizing: border-box;
     width: 16px; height: 16px;
-    border: 1.5px solid #fff; border-radius: 100%;
-    background-color: #303030;
+    border: 1.5px solid #f50; border-radius: 100%;
+    background-color: #1f1f1f;
 
     opacity: 1;
     transition: opacity 0.1s linear; transition-delay: 0.1s;
+}
+.volume_slider.muted .volume_sliderHandle {
+    border-color: #999;
+}
+.volume_slider::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: -10px;
+    width: 0;
+    height: 0;
+    border-left: 10px solid transparent;
+    border-right: 10px solid transparent;
+    border-top: 14px solid #303030;
+    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.35));
+    pointer-events: auto;
+}
+.volume_slider::after {
+    content: "";
+    position: absolute;
+    left: -4px;
+    right: -4px;
+    bottom: -14px;
+    height: 14px;
+    pointer-events: auto;
 }
 
 /* SOUNDBADGE STARTS HERE */
@@ -362,44 +422,47 @@
 .controller_queue {
     position: absolute;
     bottom: 56px;
-    right: 16px;
+    right: 8px;
     width: 480px;
     /* opacity: 0; */
-    height: 530px;
+    height: 532px;
     max-height: calc(100vh - 80px);
     background-color: rgb(18, 18, 18);
     color: white;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
 }
 .controller_queue {
     opacity: 1;
 }
 .queue_wrapper {
    position: relative;
-   border: 1px solid #303030;
-   border-radius: 6px; 
 }
 .queue_topBar {
     outline: 1px dashed red;
     width: 480px; height: 64px;
     display: flex; box-sizing: border-box;
+    align-items: center;
     padding: 16px;
     padding-bottom: 8px;
 }
-.queue_title {
-    cursor: pointer; 
-    flex-grow: 1;
-    font-size: 22px; line-height: 28px;
-    padding: 8px 16px;
-}
-.queue_clear, .queue_hide {
+.queue_clear, .queue_hide, .queue_title {
     border: none;
     cursor: pointer; align-self: center;
     padding: 6px;
     background-color: initial; color: white;
 }
+.queue_title {
+    flex-grow: 1;
+    font-size: 22px; line-height: 28px;
+    font-weight: 600;
+    padding: 8px 16px;
+    text-align: left;
+}
 .queue_clear {
     padding-left: 12px; padding-right: 12px;
     font-size: 14px; line-height: 20px;
+    font-weight: 600; margin-right: 8px;
 }
 .queue_hide {
     padding: 6px; margin-right: 16px;

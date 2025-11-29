@@ -1,11 +1,15 @@
 <div class="controller">
     <section class="controller_inner">
-        <div class="int-icon">☰</div>
+        <div class="int-icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M4 6.5L8 10.5L12 6.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+        </div>
         <div class="controller_wrapper">
-            <div class="controller_queue">
+            <!-- <div class="controller_queue">
                 <div class="queue_wrapper">
                     <div class="queue_topBar">
-                        <div class="queue_title">Next Up</div>
+                        <button class="queue_title">Next up</button>
                         <button class="queue_clear">Clear</button>
                         <button class="queue_hide">
                             <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6.94 8l-4.47 4.47 1.06 1.06L8 9.06l4.47 4.47 1.06-1.06L9.06 8l4.47-4.47-1.06-1.06L8 6.94 3.53 2.47 2.47 3.53 6.94 8z" fill="currentColor"></path></svg>
@@ -13,7 +17,7 @@
                     </div>
                 </div>
                 <div class="queue_list"></div>
-            </div>
+            </div> -->
             <div class="controller_elements">
                 <button class="skip_prev control_buttons">
                     <div class="svg-wrap">
@@ -81,11 +85,20 @@
                 </div>
                 <div class="volume">
                     <div class="volume_button_wrapper">
-                        <button class="volume_button">
-                            <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                        <button class="volume_button vol-high" data-level="high">
+                            <svg class="vol-icon-low" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                                 <path d="M7.14645 1.85356C7.46143 1.53858 8 1.76167 8 2.20712V13.7929C8 14.2384 7.46143 14.4614 7.14645 14.1465L4 11H1.5C1.22386 11 1 10.7762 1 10.5V5.50001C1 5.22387 1.22386 5.00001 1.5 5.00001H4L7.14645 1.85356Z" fill="currentColor"></path>
                                 <path d="M12 7.99999C12 9.48649 10.9189 10.7205 9.5 10.9585V5.04147C10.9189 5.27951 12 6.5135 12 7.99999Z" fill="currentColor"></path>
-                            </svg>  
+                            </svg>
+                            <svg class="vol-icon-high" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                <path d="M7.14645 1.85356C7.46143 1.53858 8 1.76167 8 2.20712V13.7929C8 14.2384 7.46143 14.4614 7.14645 14.1465L4 11H1.5C1.22386 11 1 10.7762 1 10.5V5.50001C1 5.22387 1.22386 5.00001 1.5 5.00001H4L7.14645 1.85356Z" fill="currentColor"></path>
+                                <path d="M15 7.99997C15 11.1453 12.5798 13.7254 9.5 13.9794V12.4725C11.75 12.2238 13.5 10.3162 13.5 7.99997C13.5 5.68369 11.75 3.77616 9.5 3.52744V2.02051C12.5798 2.27458 15 4.85464 15 7.99997Z" fill="currentColor"></path>
+                                <path d="M12 7.99997C12 9.48647 10.9189 10.7205 9.5 10.9585V5.04145C10.9189 5.27949 12 6.51347 12 7.99997Z" fill="currentColor"></path>
+                            </svg>
+                            <svg class="vol-icon-mute" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                <path d="M7.14645 1.85356C7.46143 1.53858 8 1.76167 8 2.20712V13.7929C8 14.2384 7.46143 14.4614 7.14645 14.1465L4 11H1.5C1.22386 11 1 10.7762 1 10.5V5.50001C1 5.22387 1.22386 5.00001 1.5 5.00001H4L7.14645 1.85356Z" fill="currentColor"></path>
+                                <path d="M13.4697 10.5303L12 9.06066L10.5303 10.5303L9.46967 9.46967L10.9393 8L9.46967 6.53033L10.5303 5.46967L12 6.93934L13.4697 5.46967L14.5303 6.53033L13.0607 8L14.5303 9.46967L13.4697 10.5303Z" fill="currentColor"></path>
+                            </svg>
                         </button>
                     </div>
                     <div class="volume_slider">
@@ -138,4 +151,8 @@
         </div>
     </section>
 </div>
-<div class="ext-icon">☰</div>
+<div class="ext-icon">
+    <svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M4 9.5L8 5.5L12 9.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"></path>
+    </svg>
+</div>

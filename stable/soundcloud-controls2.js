@@ -11,9 +11,6 @@ const badgeTitle = document.querySelector('.playbackSoundBadge__titleLink');
 const badgeLike = document.querySelector('.playbackSoundBadge__like');
 const badgeFollow = document.querySelector('.playbackSoundBadge__follow');
 const badgeQueue = document.querySelector('.playbackSoundBadge__showQueue');
-let fakeVolume = 0.6;
-let fakeMuted = false;
-let fakeLastNonZero = 0.6;
 
 const DEBUG = true;
 function scLog(...args) {
@@ -40,14 +37,12 @@ scLog("Script loaded on:", location.href);
 function getPlayPauseStateFromDOM() {
     return playBtn.classList.contains('playing') ? "playing" : "paused";
 }
-function getShuffleStateFromDOM(el) {
-    el = el ?? document.querySelector('.shuffleControl');
-    return el?.classList.contains('m-shuffling') ? "active" : "inactive";
+function getShuffleStateFromDOM() {
+    return shuffleState.classList.contains('m-shuffling') ? "active" : "inactive";
 }
-function getRepeatStateFromDOM(el) {
-    el = el ?? document.querySelector('.repeatControl');
-    if (el?.classList.contains('m-one')) return 'one';
-    if (el?.classList.contains('m-all')) return 'all';
+function getRepeatStateFromDOM() {
+    if (repeatState.classList.contains('m-one')) return 'one';
+    if (repeatState.classList.contains('m-all')) return 'all';
     return 'off'
 }
 function getTimeDisplayStateFromDOM() {
@@ -60,13 +55,17 @@ function getTimeDisplayStateFromDOM() {
     const text = timeSpan.textContent.trim();
     return text.startsWith("-") ? "remaining" : "duration";
 }
-function getLikeStateFromDOM(el) {
-    el = el ?? document.querySelector('.playbackSoundBadge__like')
-    return el?.classList.contains('sc-button-selected') ? "liked" : "unliked"
+function getLikeStateFromDOM() {
+    const title = badgeLike?.getAttribute("title") || "";
+    if (title.includes("Unlike")) return "liked";
+    if (title.includes("Like")) return "unliked";
+    return "unknown"
 }
-function getFollowStateFromDOM(el) {
-    el = el ?? document.querySelector('.playbackSoundBadge__follow')
-    return el?.classList.contains('sc-button-selected') ? "followed" : "unfollowed"
+function getFollowStateFromDOM() {
+    const title = badgeFollow?.getAttribute("title") || "";
+    if (title.includes("Unfollow")) return "followed";
+    if (title.includes("Follow")) return "unfollowed";
+    return "unknown"
 }
 function getQueueStateFromDOM() { //TODO
     const title = badgeQueue?.getAttribute("title") || "";
@@ -114,8 +113,6 @@ function getAllStatesFromDOM() {
         duration: getDurationFromDOM(),
 
         secondsElapsed: getElapsedSecondsFromDOM(),
-        volume: fakeVolume,
-        muted: fakeMuted
     };
 }
 
@@ -133,45 +130,44 @@ const clickCommandMap = {
     "playpause-toggle-command": {
         label: "Play/Pause button",
         getElement: () => playBtn,
+        postClick: () => {
+            const currentState = getPlayPauseStateFromDOM();
+            browser.runtime.sendMessage({
+                type: "playpause-state-updated",
+                state: currentState
+            });
+        }
     },
     "shuffle-toggle-command": {
         label: "Shuffle button",
         getElement: () => shuffleState,
+        postClick: () => {
+            const currentState = getShuffleStateFromDOM();
+            browser.runtime.sendMessage({
+                type: "shuffle-state-updated",
+                state: currentState
+            });
+        }
     },
     "repeat-toggle-command": {
         label: "Repeat button",
         getElement: () => repeatState,
-        postClick: async (msg) => {
-            const desiredState = msg.state;
+        postClick: (msg) => {
+            const desiredState = msg.state; // "off", "one", or "all"
             const states = ['off', 'one', 'all'];
             let currentState = getRepeatStateFromDOM();
             let safety = 0;
-
-            const waitForStateChange = async (expectedState) => {
-                // Try requestAnimationFrame first (fastest for visual updates)
-                await new Promise(resolve => requestAnimationFrame(resolve));
-                
-                let newState = getRepeatStateFromDOM();
-                if (newState === expectedState) return newState;
-
-                // Fall back to short polling if RAF wasn't enough
-                for (let i = 0; i < 10; i++) {
-                    await new Promise(resolve => setTimeout(resolve, 5));
-                    newState = getRepeatStateFromDOM();
-                    if (newState === expectedState) return newState;
-                }
-
-                return newState; // Return whatever state we have
-            };
-
+            // Cycle until reaching desired state and prevent infinite loop
             while (currentState !== desiredState && safety < states.length) {
-                const nextStateIndex = (states.indexOf(currentState) + 1) % states.length;
-                const expectedNextState = states[nextStateIndex];
-                
                 repeatState.click();
-                currentState = await waitForStateChange(expectedNextState);
+                currentState = getRepeatStateFromDOM();
                 safety++;
             }
+            // Report the new state back to the background.js 
+            browser.runtime.sendMessage({
+                type: "repeat-state-updated",
+                state: currentState
+            })
         }
     },
     "skip-prev-command": {
@@ -185,36 +181,47 @@ const clickCommandMap = {
     "time-btn-command": {
         label: "Time display button",
         getElement: () => timeBtn,
+        postClick: () => {
+            const currentState = getTimeDisplayStateFromDOM();
+            browser.runtime.sendMessage({
+                type: "time-display-state-updated",
+                state: currentState
+            });
+        }
     },
     "avatar-click-command": {
         label: "Artist portrait link",
-        selector: ".playbackSoundBadge__avatar",
-        customElement: () => badgeArtist 
+        getElement: () => badgeArtist
     },
     "artist-click-command": {
         label: "Artist link",
-        selector: ".playbackSoundBadge__lightLink",
-        customElement: () => badgeArtist
+        getElement: () => badgeArtist
     },
     "title-click-command": {
         label: "Title link",
-        selector: ".playbackSoundBadge__titleLink",
-        customElement: () => badgeTitle
+        getElement: () => badgeTitle
     },
     "like-click-command": {
-        isComplex: true,
         label: "Like button",
-        selector: ".playbackSoundBadge__like",
-        getCurrentState: getLikeStateFromDOM,
-        desiredState: null,
-
+        getElement: () => badgeLike,
+        postClick: () => {
+            const currentState = getLikeStateFromDOM();
+            browser.runtime.sendMessage({
+                type: "like-state-updated",
+                state: currentState
+            });
+        }
     },
     "follow-click-command": {
-        isComplex: true,
-        label: "Follow button",
-        selector: ".playbackSoundBadge__follow",
-        getCurrentState: getFollowStateFromDOM,
-        desiredState: null,
+        label: "Follow button", 
+        getElement: () => badgeFollow,
+        postClick: () => {
+            const currentState = getFollowStateFromDOM();
+            browser.runtime.sendMessage({
+                type: "follow-state-updated",
+                state: currentState
+            });
+        }
     },
     "queue-click-command": { //TODO
         label: "Queue button",
@@ -238,10 +245,11 @@ browser.runtime.onMessage.addListener((msg) => {
         const config = clickCommandMap[msg.type];
         scLog(`Received ${msg.type} in SC tab`);
         try {
-            const clickFn = config.isComplex ? handleComplexClickCommand : handleClickCommand;
-            clickFn({
-                ...config, 
+            handleClickCommand({
+                label: config.label,
                 customElement: config.getElement?.(),
+                selector: config.selector,
+                postClick: config.postClick,
                 msg
             });
         } catch (e) {
@@ -249,42 +257,8 @@ browser.runtime.onMessage.addListener((msg) => {
         }
     }
 
-    if (msg.type === "volume-set-command") {
-        const clamped = Math.max(0, Math.min(1, Number(msg.percent) || 0));
-        fakeVolume = clamped;
-        if (clamped > 0) {
-            fakeLastNonZero = clamped;
-        }
-        fakeMuted = clamped === 0;
-        scLog(`[Volume] set-command to ${clamped}`);
-        browser.runtime.sendMessage({
-            type: "volume-state-updated",
-            state: { percent: fakeVolume, muted: fakeMuted }
-        });
-    }
-
-    if (msg.type === "volume-mute-toggle-command") {
-        if (fakeMuted || fakeVolume === 0) {
-            const target = fakeLastNonZero || 0.6;
-            fakeVolume = target;
-            fakeMuted = false;
-        } else {
-            fakeMuted = true;
-            fakeVolume = 0;
-        }
-        scLog(`[Volume] toggle-command -> muted=${fakeMuted} volume=${fakeVolume}`);
-        browser.runtime.sendMessage({
-            type: "volume-state-updated",
-            state: { percent: fakeVolume, muted: fakeMuted }
-        });
-    }
-
     if (msg.type === "get-all-states") {
-        return Promise.resolve({
-            ...getAllStatesFromDOM(),
-            volume: fakeVolume,
-            muted: fakeMuted
-        });
+        return Promise.resolve(getAllStatesFromDOM());
     }
 })
 
@@ -324,60 +298,6 @@ function handleClickCommand({
             setTimeout(tryClick, intervalMs);
         } else {
             scError(`${label} not found or not interactable after ${maxAttempts} attempts`);
-        }
-    }
-    tryClick();
-}
-// Helper for complex click commands
-function handleComplexClickCommand({
-    selector, 
-    label,
-    desiredState = null,
-    getCurrentState = null,
-    shouldClick = null,
-    maxAttempts = 10,
-    intervalMs = 500,
-    postClick = null,
-    msg = null
-}) {
-    scLog(`[Complex] Looking for ${label}...`);
-    let attempts = 0;
-
-    function simulateRealClick(el) {
-        const events = ["mousedown", "mouseup", "click"];
-        events.forEach(type => {
-            el.dispatchEvent(new MouseEvent(type, {
-                bubbles: true,
-                cancelable: true,
-                view: window
-            }));
-        });
-        scLog(`[Complex] ${label} fully clicked (${events.join(", ")})`);
-    }
-    
-    function tryClick() {
-        const el = document.querySelector(selector);
-        const ready = el && el.offsetParent !== null;
-
-        if (ready) {
-            const currentState = getCurrentState?.();
-            const shouldProceed = shouldClick
-                ? shouldClick({ el, currentState, msg })
-                : desiredState
-                    ? currentState !== desiredState
-                    : true;
-            if (!shouldProceed) {
-                scLog(`[Complex] ${label} already in desired state: ${currentState}`)
-                return;
-            }
-            simulateRealClick(el);
-            if (postClick) {
-                setTimeout(() => postClick(msg), 100);
-            }
-        } else if (++attempts < maxAttempts) {
-            setTimeout(tryClick, intervalMs);
-        } else {
-            scError(`[Complex] ${label} not found or not clickable after ${maxAttempts} attempts`);
         }
     }
     tryClick();
@@ -580,6 +500,20 @@ registerResilientStateWatcher({ // Playpause
     strategy: 'attribute',
     attributeFilter: ['class']
 });
+registerResilientStateWatcher({ // Shuffle
+    selector: '.shuffleControl',
+    type: 'shuffle',
+    getState: getShuffleStateFromDOM,
+    strategy: 'attribute',
+    attributeFilter: ['class']
+});
+registerResilientStateWatcher({ // Repeat
+    selector: '.repeatControl',
+    type: 'repeat',
+    getState: getRepeatStateFromDOM,
+    strategy: 'attribute',
+    attributeFilter: ['class']
+});
 registerResilientStateWatcher({ // Artist
     selector: '.playbackSoundBadge__lightLink',
     type: 'songArtist',
@@ -617,7 +551,6 @@ registerResilientStateWatcher({ // Duration
     intervalMs: 500
 });
 
-// Observers for Like & Follow only
 (() => {
     class StateMonitor {
         constructor({
@@ -702,7 +635,7 @@ registerResilientStateWatcher({ // Duration
                     attributeOldValue: true
                 });
 
-                this.log(`Attached to ${this.label} target`);
+                this.log(`🎯 Attached to ${this.label} target`);
             }, this.debounceMs);
         }
 
@@ -733,42 +666,15 @@ registerResilientStateWatcher({ // Duration
         }
     }
 
-    // SHUFFLE BUTTON INSTANCE 
-    const shuffleMonitor = new StateMonitor({
-        containerSelector: '.playControls__control',
-        targetSelector: '.shuffleControl',
-        label: 'Shuffle',
-        getStateFn: getShuffleStateFromDOM,
-        onStateChange: state => {
-            browser.runtime.sendMessage({
-                type: "shuffle-state-updated",
-                state: state
-            });
-            console.log(`[ShuffleMonitor] ${state.toUpperCase()}`)
-        }
-    });
-    
-    // REPEAT BUTTON INSTANCE
-    const repeatMonitor = new StateMonitor({
-        containerSelector: '.playControls__control',
-        targetSelector: '.repeatControl',
-        label: 'Repeat',
-        getStateFn: getRepeatStateFromDOM,
-        onStateChange: state => {
-            browser.runtime.sendMessage({
-                type: "repeat-state-updated",
-                state: state
-            })
-            console.log(`[RepeatMonitor] ${state.toUpperCase()}`)            
-        }
-    })
-
-    // LIKE BUTTON INSTANCE - simplified state
+    // ✅ LIKE BUTTON INSTANCE - simplified state
     const likeMonitor = new StateMonitor({
         containerSelector: '.playControls__soundBadge',
         targetSelector: '.playbackSoundBadge__like',
         label: 'Like',
-        getStateFn: getLikeStateFromDOM,
+        getStateFn: target => {
+            const isLiked = target.classList.contains('sc-button-selected');
+            return isLiked ? "liked" : "unliked";
+        },
         onStateChange: state => {
             const icon = state === "liked" ? '❤️' : '🤍';
             browser.runtime.sendMessage({
@@ -779,12 +685,15 @@ registerResilientStateWatcher({ // Duration
         }
     });
 
-    // FOLLOW BUTTON INSTANCE - simplified state
+    // ✅ FOLLOW BUTTON INSTANCE - simplified state
     const followMonitor = new StateMonitor({
         containerSelector: '.playControls__soundBadge',
         targetSelector: '.playbackSoundBadge__follow',
         label: 'Follow',
-        getStateFn: getFollowStateFromDOM,
+        getStateFn: target => {
+            const isFollowing = target.classList.contains('sc-button-selected');
+            return isFollowing ? "followed" : "unfollowed";
+        },
         onStateChange: state => {
             const icon = state === "followed" ? '✅' : '➕';
             browser.runtime.sendMessage({
@@ -795,13 +704,11 @@ registerResilientStateWatcher({ // Duration
         }
     });
 
-    // Start both
-    shuffleMonitor.start();
-    repeatMonitor.start();
+    // 🎬 Start both
     likeMonitor.start();
     followMonitor.start();
 
-    // Expose for debugging
+    // 👇 Expose for debugging
     window.stateMonitors = {
         likeMonitor,
         followMonitor

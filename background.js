@@ -216,6 +216,9 @@ async function setActiveSoundCloudTab(tabId) {
     } else {
         bgWarn("[ActiveTab] No known state to broadcast for tab:", tabId);
     }
+
+    // Refresh from live tab to avoid stale cache when switching sources
+    fetchAndBroadcastTabState(tabId);
 }
 // Helper that finds and sets SoundCloud tab ID if not known
 async function ensureSoundCloudTabId() {
@@ -293,6 +296,8 @@ function ensureTabState(tabId) {
             display: "duration",
             like: "unliked",
             follow: "unfollowed",
+            volume: 1,
+            muted: false,
             songTitle: null, 
             songArtist: null,
             // Timeline tracking
@@ -439,6 +444,25 @@ async function handleRuntimeMessage(msg, sender, sendResponse) {
     }
     // 2. For all others
     switch (msg.type) {
+        case "volume-state-updated": {
+            const volState = msg.state || {};
+            const percentVal = (typeof volState.percent === "number")
+                ? volState.percent
+                : (typeof volState.volume === "number" ? volState.volume : null);
+            const partial = {
+                volume: percentVal,
+                muted: !!volState.muted
+            };
+            const changed = updateTabState(tabId, partial);
+            if (changed && tabId === activeSoundCloudTabId) {
+                const outbound = {
+                    percent: tabStates[tabId].volume ?? 0,
+                    muted: !!tabStates[tabId].muted
+                };
+                broadcastStateToContentTabs("volume-state-updated", outbound);
+            }
+            return true;
+        }
         case "get-settings":
             const settings = await browser.storage.local.get(SETTINGS_KEYS);
             bgLog("[Settings] Responding to get-settings with:", settings);
@@ -625,6 +649,28 @@ async function handleRuntimeMessage(msg, sender, sendResponse) {
                     .catch(err => bgError("[Queue Click request] Failed to send queue click", err));
             })
             return true;   
+        case "volume-set-request":
+            ensureSoundCloudTabId().then(tabId => {
+                if (tabId === null) {
+                    bgLog("[Volume request] No SoundCloud tab found");
+                    return;
+                }
+                browser.tabs.sendMessage(tabId, { type: "volume-set-command", percent: msg.percent, muted: msg.muted })
+                    .then(() => bgLog("[Volume request] Volume set command sent"))
+                    .catch(err => bgError("[Volume request] Failed to send volume set", err));
+            });
+            return true;
+        case "volume-mute-toggle-request":
+            ensureSoundCloudTabId().then(tabId => {
+                if (tabId === null) {
+                    bgLog("[Volume toggle request] No SoundCloud tab found");
+                    return;
+                }
+                browser.tabs.sendMessage(tabId, { type: "volume-mute-toggle-command" })
+                    .then(() => bgLog("[Volume toggle request] Volume toggle command sent"))
+                    .catch(err => bgError("[Volume toggle request] Failed to send volume toggle", err));
+            });
+            return true;
 
         default:
             bgWarn("[Message] Unhandled message type:", msg.type);
@@ -632,6 +678,27 @@ async function handleRuntimeMessage(msg, sender, sendResponse) {
     }
     return true;
 };
+// Helper to request a fresh full state from a tab, update cache, and broadcast
+async function fetchAndBroadcastTabState(tabId, { attempts = 2, delayMs = 150 } = {}) {
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+        try {
+            const snapshot = await browser.tabs.sendMessage(tabId, { type: "get-all-states" });
+            if (snapshot && typeof snapshot === "object") {
+                updateTabState(tabId, snapshot, { force: true });
+                broadcastStateToContentTabs("all-states-updated", tabStates[tabId]);
+                bgLog(`[Refresh] Pulled and broadcast fresh state from tab ${tabId}`);
+                return;
+            } else {
+                bgWarn(`[Refresh] Empty/invalid snapshot from tab ${tabId}`);
+            }
+        } catch (err) {
+            bgWarn(`[Refresh] Failed to pull state from tab ${tabId} (attempt ${attempt}/${attempts}):`, err);
+        }
+        if (attempt < attempts) {
+            await new Promise(r => setTimeout(r, delayMs));
+        }
+    }
+}
 /// ======== Two-level Change Filter ========
 const perFieldChangeLogic = {
     // Toggle buttons should always be accepted
@@ -640,6 +707,9 @@ const perFieldChangeLogic = {
     repeat: (oldVal, newVal) => oldVal !== newVal,
     like: (oldVal, newVal) => oldVal !== newVal,
     follow: (oldVal, newVal) => oldVal !== newVal,
+    volume: (oldVal, newVal) =>
+        typeof newVal === "number" && Math.abs((newVal ?? 0) - (oldVal ?? 0)) >= 0.01,
+    muted: (oldVal, newVal) => !!oldVal !== !!newVal,
     display: (oldVal, newVal) => oldVal !== newVal,
     // Tickers should allow small changes
     secondsElapsed: (oldVal, newVal) => 
