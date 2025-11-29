@@ -14,6 +14,8 @@ let volumeState = {
     lastNonZeroPercent: 0.6,
     muted: false
 };
+let isTimelineScrubbing = false;
+let lastTimelineSeekSend = 0;
 
 const DEBUG = true;
 function log(...args) {
@@ -325,7 +327,7 @@ function startInterpolatedTimelineLoop(root) {
     function loop() {
         const now = performance.now();
         
-        if (isPlaying) {
+        if (isPlaying && !isTimelineScrubbing) {
             const delta = (now - lastUpdateTime) / 1000;
             const virtualElapsed = cachedElapsed + delta;
             const percent = cachedDuration > 0 ? (virtualElapsed / cachedDuration) * 100 : 0;
@@ -416,6 +418,7 @@ function setupButtonListeners(root) {
     if (volumeSlider) {
         setupVolumeSlider(root);
     }
+    setupTimelineScrubber(root);
 
     if (repeat) {
         repeat.addEventListener('click', async () => {
@@ -517,6 +520,13 @@ function setupMessageListeners() {
             const state = msg.state || {};
             log("[Volume] Incoming volume-state-updated", state);
             setVolumeUI({ percent: state.percent ?? 0, muted: !!state.muted }, shadowRoot);
+        }
+        if (msg.type === "timeline-seek-state-updated") {
+            const state = msg.state || {};
+            const seconds = state.seconds ?? cachedElapsed;
+            const duration = state.duration ?? cachedDuration;
+            log("[Timeline] Incoming timeline-seek-state-updated", state);
+            setTimelineUI(seconds, duration, shadowRoot);
         }
         // When it is a settings update
         if (msg.type === "settings-updated" && msg.settings) {
@@ -706,4 +716,81 @@ function setupVolumeSlider(root) {
             observer = null;
         }
     };
+}
+
+/// ======== Timeline Scrubber (UI only for now) ========
+function setupTimelineScrubber(root) {
+    const track = root.querySelector('.timeProgress');
+    const progressFill = root.querySelector('.progressBar');
+    const handle = root.querySelector('.progressHandle');
+    if (!track || !progressFill || !handle) return;
+
+    let pointerId = null;
+
+    const clampPercent = (p) => Math.max(0, Math.min(100, p));
+    const SEND_THROTTLE_MS = 60;
+
+    const maybeSendTimelineSeek = (percent, { force = false } = {}) => {
+        const now = Date.now();
+        if (!force && now - lastTimelineSeekSend < SEND_THROTTLE_MS) return;
+        lastTimelineSeekSend = now;
+        const clamped = clampPercent(percent);
+        const seconds = cachedDuration > 0 ? (clamped / 100) * cachedDuration : null;
+        log("[Timeline] Sending seek request", { seconds, percent: clamped });
+        browser.runtime.sendMessage({
+            type: "timeline-seek-request",
+            seconds,
+            percent: clamped
+        });
+    };
+
+    const applyPercent = (percent, { send = false } = {}) => {
+        const clamped = clampPercent(percent);
+        updateTimelineProgressBar(clamped, root);
+        if (cachedDuration > 0) {
+            const newElapsed = (clamped / 100) * cachedDuration;
+            cachedElapsed = newElapsed;
+            updateTimelineMetadataUI(cachedElapsed, cachedDuration, Math.max(cachedDuration - cachedElapsed, 0), root);
+        }
+        if (send) {
+            maybeSendTimelineSeek(clamped);
+        }
+    };
+
+    const percentFromClientX = (clientX) => {
+        const rect = track.getBoundingClientRect();
+        if (rect.width === 0) return 0;
+        const raw = ((clientX - rect.left) / rect.width) * 100;
+        return clampPercent(raw);
+    };
+
+    const onMove = (e) => {
+        if (e.pointerId !== pointerId) return;
+        applyPercent(percentFromClientX(e.clientX), { send: true });
+        e.preventDefault();
+    };
+
+    const endScrub = (e) => {
+        if (e.pointerId !== pointerId) return;
+        isTimelineScrubbing = false;
+        pointerId = null;
+        track.classList.remove('scrubbing');
+        // send final position immediately
+        applyPercent(percentFromClientX(e.clientX), { send: true });
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', endScrub);
+        window.removeEventListener('pointercancel', endScrub);
+    };
+
+    track.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        isTimelineScrubbing = true;
+        pointerId = e.pointerId;
+        track.classList.add('scrubbing');
+        applyPercent(percentFromClientX(e.clientX), { send: true });
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', endScrub);
+        window.addEventListener('pointercancel', endScrub);
+        e.preventDefault();
+    });
 }

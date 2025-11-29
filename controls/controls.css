@@ -227,6 +227,13 @@
         opacity: 1;
     }
 }
+.timeProgress.scrubbing .progressBar {
+    transition: none;
+}
+.timeProgress.scrubbing .progressHandle {
+    transition: none;
+    opacity: 1;
+}
 
 /* VOLUME STARTS HERE */
 .volume {

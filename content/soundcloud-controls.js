@@ -4,6 +4,8 @@ const shuffleState = document.querySelector('.shuffleControl');
 const repeatState = document.querySelector('.repeatControl');
 const prevBtn = document.querySelector('.skipControl__previous');
 const nextBtn = document.querySelector('.skipControl__next');
+let fakeElapsed = getElapsedSecondsFromDOM() ?? 0;
+let fakeDuration = getDurationFromDOM() ?? 180;
 
 const timeBtn = document.querySelector('.playbackTimeline__duration');
 const badgeArtist = document.querySelector('.playbackSoundBadge__lightLink')
@@ -276,6 +278,25 @@ browser.runtime.onMessage.addListener((msg) => {
         browser.runtime.sendMessage({
             type: "volume-state-updated",
             state: { percent: fakeVolume, muted: fakeMuted }
+        });
+    }
+
+    if (msg.type === "timeline-seek-command") {
+        const targetSeconds = typeof msg.seconds === "number" ? msg.seconds : null;
+        const targetPercent = typeof msg.percent === "number" ? msg.percent : null;
+        if (targetSeconds !== null && !isNaN(targetSeconds)) {
+            fakeElapsed = Math.max(0, Math.min(fakeDuration, targetSeconds));
+        } else if (targetPercent !== null && !isNaN(targetPercent) && fakeDuration > 0) {
+            fakeElapsed = Math.max(0, Math.min(fakeDuration, (targetPercent / 100) * fakeDuration));
+        }
+        scLog(`[Timeline] seek-command -> seconds=${fakeElapsed} / duration=${fakeDuration}`);
+        browser.runtime.sendMessage({
+            type: "timeline-seek-state-updated",
+            state: {
+                seconds: fakeElapsed,
+                duration: fakeDuration,
+                percent: fakeDuration > 0 ? (fakeElapsed / fakeDuration) * 100 : 0
+            }
         });
     }
 

@@ -419,6 +419,7 @@ const fieldMap = {
     "duration-state-updated":   { field: "duration", afterUpdate: defaultBroadcastIfActive },
     // Timeline live ticker fields
     "secondsElapsed-state-updated": { field: "secondsElapsed", afterUpdate: defaultBroadcastIfActive },
+    "timeline-seek-state-updated": { field: "secondsElapsed", afterUpdate: defaultBroadcastIfActive },
 };
 // Central message handler 
 async function handleRuntimeMessage(msg, sender, sendResponse) {
@@ -669,6 +670,17 @@ async function handleRuntimeMessage(msg, sender, sendResponse) {
                 browser.tabs.sendMessage(tabId, { type: "volume-mute-toggle-command" })
                     .then(() => bgLog("[Volume toggle request] Volume toggle command sent"))
                     .catch(err => bgError("[Volume toggle request] Failed to send volume toggle", err));
+            });
+            return true;
+        case "timeline-seek-request":
+            ensureSoundCloudTabId().then(tabId => {
+                if (tabId === null) {
+                    bgLog("[Timeline seek request] No SoundCloud tab found");
+                    return;
+                }
+                browser.tabs.sendMessage(tabId, { type: "timeline-seek-command", seconds: msg.seconds, percent: msg.percent })
+                    .then(() => bgLog("[Timeline seek request] Seek command sent"))
+                    .catch(err => bgError("[Timeline seek request] Failed to send seek", err));
             });
             return true;
 
