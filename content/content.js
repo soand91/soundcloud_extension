@@ -56,21 +56,17 @@ async function injectToolbar() {
     document.body.appendChild(host);
     const shadow = host.attachShadow({ mode: 'open' });
 
-    // 1. Fetch the font as a Blob
-    const fontBlob = await fetch(browser.runtime.getURL('controls/Inter-SemiBold.woff'))
-        .then(r => r.blob());
-    // 2. Create a Blob URL
-    const fontUrl = URL.createObjectURL(fontBlob);
-    // 3. Inject with FontFace API (bypasses Firefox's restrictions)
+    // Load font from the extension package (avoid blob: URLs that some sites block via CSP)
+    const fontUrl = browser.runtime.getURL('controls/Inter-SemiBold.woff');
     const fontFace = new FontFace('Inter', `url(${fontUrl})`, {
         weight: 600,
         style: 'normal',
         display: 'swap'
     });
-    // 4. Force-load and apply
+    // Force-load and apply
     await fontFace.load();
     document.fonts.add(fontFace);
-    // 5. Apply to all Shadow DOM elements
+    // Apply to all Shadow DOM elements
     Array.from(shadow.querySelectorAll('*')).forEach(el => {
         el.style.setProperty('font-family', '"Inter", sans-serif', 'important');
     });
@@ -120,14 +116,33 @@ function waitForButtons(root) {
         check();
     });
 }
+
+// Measure native scrollbar width so we can reserve that space even when the page doesn't need to scroll.
+let cachedScrollbarWidth = null;
+function getScrollbarWidth() {
+    if (cachedScrollbarWidth !== null) return cachedScrollbarWidth;
+    const probe = document.createElement('div');
+    probe.style.width = '100px';
+    probe.style.height = '100px';
+    probe.style.overflow = 'scroll';
+    probe.style.position = 'absolute';
+    probe.style.top = '-9999px';
+    document.body.appendChild(probe);
+    cachedScrollbarWidth = probe.offsetWidth - probe.clientWidth;
+    document.body.removeChild(probe);
+    return cachedScrollbarWidth;
+}
 /// ======== Scrollbar Width Sync (host -> CSS var) ========
 function setupScrollbarGutter(root) {
     if (!root?.host) return;
     const host = root.host;
+    const fallbackScrollbarWidth = getScrollbarWidth();
 
     const updateScrollbarVar = () => {
-        const scrollbarWidth = Math.max(window.innerWidth - document.documentElement.clientWidth, 0);
-        host.style.setProperty('--page-scrollbar', `${scrollbarWidth}px`);
+        const measuredWidth = Math.max(window.innerWidth - document.documentElement.clientWidth, 0);
+        const missingWidth = measuredWidth === 0 ? fallbackScrollbarWidth : 0;
+        host.style.setProperty('--page-scrollbar', `${measuredWidth}px`);
+        host.style.setProperty('--page-scrollbar-missing', `${missingWidth}px`);
     };
 
     updateScrollbarVar();
