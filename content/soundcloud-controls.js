@@ -6,6 +6,13 @@ const prevBtn = document.querySelector('.skipControl__previous');
 const nextBtn = document.querySelector('.skipControl__next');
 let fakeElapsed = getElapsedSecondsFromDOM() ?? 0;
 let fakeDuration = getDurationFromDOM() ?? 180;
+let lastTimelineSeek = null;
+let fakeVolume = 0.6;
+let fakeMuted = false;
+let fakeLastNonZero = 0.6;
+let lastVolumeBroadcast = { percent: fakeVolume, muted: fakeMuted };
+let cachedVolumeSlider = null;
+let lastVolumeWarnTs = 0;
 
 const timeBtn = document.querySelector('.playbackTimeline__duration');
 const badgeArtist = document.querySelector('.playbackSoundBadge__lightLink')
@@ -13,9 +20,6 @@ const badgeTitle = document.querySelector('.playbackSoundBadge__titleLink');
 const badgeLike = document.querySelector('.playbackSoundBadge__like');
 const badgeFollow = document.querySelector('.playbackSoundBadge__follow');
 const badgeQueue = document.querySelector('.playbackSoundBadge__showQueue');
-let fakeVolume = 0.6;
-let fakeMuted = false;
-let fakeLastNonZero = 0.6;
 
 const DEBUG = true;
 function scLog(...args) {
@@ -94,6 +98,270 @@ function getElapsedSecondsFromDOM() { //! This returns seconds that is used to s
     const val = el?.getAttribute('aria-valuenow');
     return val ? Number(val) : null;
 }
+const volumeSliderSelectors = [
+    '.volume_sliderWrapper',
+    '.volume__sliderWrapper',
+    '.volumeSlider__sliderWrapper',
+    '.volume__slider',
+    '.volumeSlider__slider',
+    '[data-testid="volume-slider"]',
+    '[aria-label*="volume" i]',
+    '.playControls__volume [role="slider"]'
+];
+const volumeContainerSelectors = [
+    '.volume',
+    '.volume__button',
+    '.playControls__volume',
+    '.volume__iconButton',
+    '.volume__wrapper'
+];
+
+function findFirstVisible(selectors) {
+    for (const sel of selectors) {
+        const els = Array.from(document.querySelectorAll(sel));
+        const visible = els.find(el => el && el.offsetParent !== null);
+        if (visible) return visible;
+    }
+    return null;
+}
+
+function resolveVolumeSlider() {
+    if (cachedVolumeSlider && document.contains(cachedVolumeSlider)) return cachedVolumeSlider;
+    const found = findFirstVisible(volumeSliderSelectors);
+    // Filter out the mute button posing as a slider
+    if (found && found.classList.contains('volume__button')) {
+        return null;
+    }
+    if (found) {
+        cachedVolumeSlider = found;
+    }
+    return found;
+}
+
+function getVolumeFromDOM() {
+    // Try to read aria-valuenow if present (0-1 or 0-100)
+    const slider = resolveVolumeSlider();
+    const button = document.querySelector('.volume__button');
+    let percent = null;
+    if (slider) {
+        const raw = slider.getAttribute('aria-valuenow');
+        if (raw != null) {
+            const num = Number(raw);
+            if (!isNaN(num)) {
+                percent = num > 1 ? num / 100 : num;
+            }
+        }
+    }
+    if (percent == null) {
+        percent = fakeVolume;
+    }
+    percent = Math.max(0, Math.min(1, percent));
+
+    let muted = percent === 0;
+    if (button) {
+        const ariaPressed = button.getAttribute('aria-pressed');
+        const ariaLabel = (button.getAttribute('aria-label') || '').toLowerCase();
+        if (ariaPressed === "true" || ariaLabel.includes('mute')) {
+            muted = true;
+        }
+    }
+    return { percent, muted };
+}
+function openVolumeSlider() {
+    const slider = resolveVolumeSlider();
+    const targets = [
+        ...volumeContainerSelectors.map(sel => findFirstVisible([sel])).filter(Boolean)
+    ];
+    targets.forEach(t => {
+        if (!t) return;
+        ["mouseenter", "mouseover", "pointerenter", "pointerover"].forEach(type => {
+            t.dispatchEvent(new MouseEvent(type, {
+                bubbles: true,
+                cancelable: true,
+                view: window
+            }));
+        });
+    });
+    return slider || resolveVolumeSlider();
+}
+function simulateVolumeScrub(percent) {
+    scWarn("[Volume] simulateVolumeScrub stubbed (no DOM interaction)");
+    return false;
+}
+function simulateVolumeToggle() {
+    const { button } = getVolumeTargets();
+    if (!button) {
+        scWarn("[Volume] mute button not found");
+        return false;
+    }
+    const rect = button.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    ["pointerdown", "mousedown", "pointerup", "mouseup", "click"].forEach(type => {
+        button.dispatchEvent(new MouseEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            clientX: x,
+            clientY: y,
+            view: window
+        }));
+    });
+    scLog("[Volume] Simulated mute toggle click");
+    return true;
+}
+function simulateVolumeToggleSimple() {
+    const btn = findFirstVisible(['.volume__button', '.playControls__volume button', '.volume__iconButton']);
+    if (!btn) {
+        scWarn("[Volume] mute button not found for toggle");
+        return false;
+    }
+    const rect = btn.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    ["pointerdown", "mousedown", "pointerup", "mouseup", "click"].forEach(type => {
+        btn.dispatchEvent(new MouseEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            clientX: x,
+            clientY: y,
+            view: window
+        }));
+    });
+    scLog("[Volume] Simulated simple mute toggle click");
+    return true;
+}
+function simulateVolumeScrubOnce(percent) {
+    const slider = resolveVolumeSlider();
+    if (!slider) {
+        scWarn("[Volume] slider wrapper not found for scrub click");
+        return false;
+    }
+
+    const target = slider.querySelector('.volume__sliderBackground') ||
+        slider.querySelector('[role="slider"]') ||
+        slider;
+    const rect = target.getBoundingClientRect();
+    if (!rect || (rect.width === 0 && rect.height === 0)) {
+        scWarn("[Volume] slider has no size for scrub click");
+        return false;
+    }
+
+    const clamped = Math.max(0, Math.min(1, percent));
+    const x = rect.left + rect.width / 2;
+    const y = rect.bottom - clamped * rect.height;
+
+    const mouseDownEvent = new MouseEvent("mousedown", {
+        bubbles: true,
+        cancelable: true,
+        clientX: x,
+        clientY: y,
+        view: window
+    });
+    target.dispatchEvent(mouseDownEvent);
+
+    const mouseMoveEvent = new MouseEvent("mousemove", {
+        bubbles: true,
+        cancelable: true,
+        clientX: x,
+        clientY: y,
+        view: window
+    });
+    target.dispatchEvent(mouseMoveEvent);
+
+    const mouseUpEvent = new MouseEvent("mouseup", {
+        bubbles: true,
+        cancelable: true,
+        clientX: x,
+        clientY: y,
+        view: window
+    });
+    target.dispatchEvent(mouseUpEvent);
+
+    scLog(`[Volume] Simulated scrub at ${Math.round(clamped * 100)}% (x=${x.toFixed(1)}, y=${y.toFixed(1)})`);
+    return true;
+}
+function startVolumeWatcher() {
+    const pollInterval = 500;
+    setInterval(() => {
+        const { percent, muted } = getVolumeFromDOM();
+        const changed = Math.abs(percent - (lastVolumeBroadcast.percent ?? 0)) >= 0.01
+            || muted !== lastVolumeBroadcast.muted;
+        if (changed) {
+            fakeVolume = percent;
+            if (percent > 0) {
+                fakeLastNonZero = percent;
+            }
+            fakeMuted = muted;
+            lastVolumeBroadcast = { percent, muted };
+            browser.runtime.sendMessage({
+                type: "volume-state-updated",
+                state: { percent, muted }
+            });
+            scLog(`[Volume] DOM change broadcast percent=${percent} muted=${muted}`);
+        }
+    }, pollInterval);
+}
+
+function startPersistentVolumeHover() {
+    const refreshInterval = 1000; // Refresh hover every second
+    
+    function maintainHover() {
+        const btn = findFirstVisible(['.volume__button', '.playControls__volume button', '.volume__iconButton']);
+        if (btn) {
+            ["mouseenter", "mouseover"].forEach(type => {
+                btn.dispatchEvent(new MouseEvent(type, {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window
+                }));
+            });
+        }
+    }
+    
+    // Initial hover after a brief delay to let page load
+    setTimeout(() => {
+        maintainHover();
+        scLog("[Volume] Initial persistent hover established");
+    }, 1000);
+    
+    // Maintain hover periodically
+    setInterval(maintainHover, refreshInterval);
+    scLog("[Volume] Persistent hover loop started");
+}
+function getVolumeTargets() {
+    const container = document.querySelector('.volume');
+    const button = document.querySelector('.volume__button');
+    const slider = document.querySelector('.volume_sliderWrapper');
+    return { container, button, slider };
+}
+function simulateTimelineSeek(percent) {
+    const wrapper = document.querySelector('.playbackTimeline__progressWrapper') ||
+        document.querySelector('.playbackTimeline');
+    if (!wrapper) {
+        scWarn("[Timeline] progress wrapper not found for seek");
+        return;
+    }
+    const rect = wrapper.getBoundingClientRect();
+    if (rect.width === 0) {
+        scWarn("[Timeline] wrapper has zero width, cannot seek");
+        return;
+    }
+    const clamped = Math.max(0, Math.min(100, percent));
+    const x = rect.left + (clamped / 100) * rect.width;
+    const y = rect.top + rect.height / 2;
+
+    const events = ["pointerdown", "mousedown", "pointerup", "mouseup", "click"];
+    events.forEach(type => {
+        wrapper.dispatchEvent(new MouseEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            clientX: x,
+            clientY: y,
+            view: window
+        }));
+    });
+    scLog(`[Timeline] Simulated seek at ${clamped}% (x=${x.toFixed(1)}, y=${y.toFixed(1)})`);
+}
 function getAvatarURL() {
     const artworkEl = document.querySelector('.playbackSoundBadge__avatar .sc-artwork.image__full');
     if (!artworkEl) return null;
@@ -143,38 +411,7 @@ const clickCommandMap = {
     "repeat-toggle-command": {
         label: "Repeat button",
         getElement: () => repeatState,
-        postClick: async (msg) => {
-            const desiredState = msg.state;
-            const states = ['off', 'one', 'all'];
-            let currentState = getRepeatStateFromDOM();
-            let safety = 0;
-
-            const waitForStateChange = async (expectedState) => {
-                // Try requestAnimationFrame first (fastest for visual updates)
-                await new Promise(resolve => requestAnimationFrame(resolve));
-                
-                let newState = getRepeatStateFromDOM();
-                if (newState === expectedState) return newState;
-
-                // Fall back to short polling if RAF wasn't enough
-                for (let i = 0; i < 10; i++) {
-                    await new Promise(resolve => setTimeout(resolve, 5));
-                    newState = getRepeatStateFromDOM();
-                    if (newState === expectedState) return newState;
-                }
-
-                return newState; // Return whatever state we have
-            };
-
-            while (currentState !== desiredState && safety < states.length) {
-                const nextStateIndex = (states.indexOf(currentState) + 1) % states.length;
-                const expectedNextState = states[nextStateIndex];
-                
-                repeatState.click();
-                currentState = await waitForStateChange(expectedNextState);
-                safety++;
-            }
-        }
+        // No postClick; repeat monitor will emit the state change
     },
     "skip-prev-command": {
         label: "Skip prev button",
@@ -187,6 +424,7 @@ const clickCommandMap = {
     "time-btn-command": {
         label: "Time display button",
         getElement: () => timeBtn,
+        // No postClick; display watcher will emit the change
     },
     "avatar-click-command": {
         label: "Artist portrait link",
@@ -253,19 +491,24 @@ browser.runtime.onMessage.addListener((msg) => {
 
     if (msg.type === "volume-set-command") {
         const clamped = Math.max(0, Math.min(1, Number(msg.percent) || 0));
+        // No need to hover - it's already persistently hovered
+        const didSimulate = simulateVolumeScrubOnce(clamped);
         fakeVolume = clamped;
         if (clamped > 0) {
             fakeLastNonZero = clamped;
         }
         fakeMuted = clamped === 0;
-        scLog(`[Volume] set-command to ${clamped}`);
+        scLog(`[Volume] set-command to ${clamped} (simulated=${didSimulate})`);
         browser.runtime.sendMessage({
             type: "volume-state-updated",
             state: { percent: fakeVolume, muted: fakeMuted }
         });
+        return;
     }
 
     if (msg.type === "volume-mute-toggle-command") {
+        const didSimulate = simulateVolumeToggleSimple();
+
         if (fakeMuted || fakeVolume === 0) {
             const target = fakeLastNonZero || 0.6;
             fakeVolume = target;
@@ -274,7 +517,7 @@ browser.runtime.onMessage.addListener((msg) => {
             fakeMuted = true;
             fakeVolume = 0;
         }
-        scLog(`[Volume] toggle-command -> muted=${fakeMuted} volume=${fakeVolume}`);
+        scLog(`[Volume] toggle-command -> muted=${fakeMuted} volume=${fakeVolume} (simulated=${didSimulate})`);
         browser.runtime.sendMessage({
             type: "volume-state-updated",
             state: { percent: fakeVolume, muted: fakeMuted }
@@ -283,21 +526,29 @@ browser.runtime.onMessage.addListener((msg) => {
 
     if (msg.type === "timeline-seek-command") {
         const targetSeconds = typeof msg.seconds === "number" ? msg.seconds : null;
-        const targetPercent = typeof msg.percent === "number" ? msg.percent : null;
-        if (targetSeconds !== null && !isNaN(targetSeconds)) {
-            fakeElapsed = Math.max(0, Math.min(fakeDuration, targetSeconds));
-        } else if (targetPercent !== null && !isNaN(targetPercent) && fakeDuration > 0) {
-            fakeElapsed = Math.max(0, Math.min(fakeDuration, (targetPercent / 100) * fakeDuration));
+        const domDuration = getDurationFromDOM();
+        const duration = Number.isFinite(domDuration) ? domDuration : fakeDuration;
+        let targetPercent = typeof msg.percent === "number" ? msg.percent : null;
+        if (targetPercent === null && targetSeconds !== null && duration > 0) {
+            targetPercent = (targetSeconds / duration) * 100;
         }
-        scLog(`[Timeline] seek-command -> seconds=${fakeElapsed} / duration=${fakeDuration}`);
-        browser.runtime.sendMessage({
-            type: "timeline-seek-state-updated",
-            state: {
-                seconds: fakeElapsed,
-                duration: fakeDuration,
-                percent: fakeDuration > 0 ? (fakeElapsed / fakeDuration) * 100 : 0
-            }
-        });
+        if (targetPercent !== null && !isNaN(targetPercent)) {
+            simulateTimelineSeek(targetPercent);
+            lastTimelineSeek = targetPercent;
+            // Optimistically report the seek; watchers should correct if needed
+            const percent = Math.max(0, Math.min(100, targetPercent));
+            const seconds = duration > 0 ? (percent / 100) * duration : targetSeconds;
+            browser.runtime.sendMessage({
+                type: "timeline-seek-state-updated",
+                state: {
+                    seconds,
+                    duration,
+                    percent
+                }
+            });
+        } else {
+            scWarn("[Timeline] seek-command received without valid target");
+        }
     }
 
     if (msg.type === "get-all-states") {
@@ -637,6 +888,14 @@ registerResilientStateWatcher({ // Duration
     strategy: 'poll',
     intervalMs: 500
 });
+registerResilientStateWatcher({ // Time display toggle (duration vs remaining)
+    selector: '.playbackTimeline__duration',
+    type: 'display',
+    getState: getTimeDisplayStateFromDOM,
+    strategy: 'poll',
+    intervalMs: 300,
+    container: '.playbackTimeline'
+});
 
 // Observers for Like & Follow only
 (() => {
@@ -828,3 +1087,10 @@ registerResilientStateWatcher({ // Duration
         followMonitor
     };
 })();
+
+// Start volume watcher to capture SC-side mute/volume changes
+startVolumeWatcher();
+
+// Start persistent volume hover to keep slider always visible
+startPersistentVolumeHover();
+

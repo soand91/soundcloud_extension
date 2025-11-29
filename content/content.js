@@ -159,6 +159,7 @@ async function syncAllStates() {
     const duration = response.duration ?? 0;
     const volume = response.volume ?? 1;
     const muted = !!response.muted;
+    const displayMode = response.display ?? response.time ?? null;
 
     log("Full raw response from background:", response);
     if (!response) {
@@ -168,6 +169,7 @@ async function syncAllStates() {
     setPlayPauseButtonUI(response.playpause, shadowRoot);
     setShuffleButtonUI(response.shuffle, shadowRoot);
     setRepeatButtonUI(response.repeat, shadowRoot);
+    if (displayMode) setTimeDisplayUI(displayMode, shadowRoot);
     setLikeUI(response.like, shadowRoot);
     setFollowUI(response.follow, shadowRoot);
 
@@ -437,29 +439,10 @@ function setupButtonListeners(root) {
 
     if (repeat) {
         repeat.addEventListener('click', async () => {
-            const states = ['off', 'one', 'all'];
-            let currentIndex = states.findIndex(state => repeat.classList.contains(state));
-            const nextIndex = (currentIndex + 1) % states.length;
-            const nextState = states[nextIndex];
             try {
                 browser.runtime.sendMessage({
-                    type: "repeat-toggle-request",
-                    state: nextState
+                    type: "repeat-toggle-request"
                 });
-                repeat.classList.remove(...states);
-                repeat.classList.add(nextState);
-
-                // const response = await browser.runtime.sendMessage({
-                //     type: "repeat-toggle-request",
-                //     state: nextState
-                // });
-                // if (response && response.success) {
-                //     log("repeat-toggle-request succeeded")
-                //     repeat.classList.remove(...states);
-                //     repeat.classList.add(nextState);
-                // } else {
-                //     warn("repeat-toggle-request failed or was ignored.")
-                // }
             } catch (err) {
                 error('Repeat toggle failed:', err);
             } 
@@ -479,6 +462,7 @@ function setupMessageListeners() {
         "playpause-state-updated": setPlayPauseButtonUI,
         "shuffle-state-updated": setShuffleButtonUI,
         "repeat-state-updated": setRepeatButtonUI,
+        "display-state-updated": setTimeDisplayUI,
         "time-display-updated": setTimeDisplayUI,
         "like-state-updated": setLikeUI,
         "follow-state-updated": setFollowUI,
@@ -503,13 +487,13 @@ function setupMessageListeners() {
             if (states.repeat) {
                 stateHandlers["repeat-state-updated"](states.repeat, shadowRoot);
             }
-            if (states.time) {
-                stateHandlers["time-display-updated"](states.time, shadowRoot);
+            if (states.display) {
+                stateHandlers["display-state-updated"](states.display, shadowRoot);
             }
             if (states.like) {
                 stateHandlers["like-state-updated"](states.like, shadowRoot);
             }
-            if (states.follow) {   
+            if (states.follow) {
                 stateHandlers["follow-state-updated"](states.follow, shadowRoot);
             }
             if (states.songTitle) {

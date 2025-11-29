@@ -262,7 +262,13 @@ async function broadcastStateToContentTabs(type, state) {
             .map(tab =>
                 browser.tabs.sendMessage(tab.id, { type, state })
                     .then(() => bgLog(`[Broadcast] Sent '${type}' to tab ${tab.id}`))
-                    .catch(err => bgWarn(`[Broadcast] Failed to send '${type}' to tab ${tab.id}:`, err))
+                    .catch(err => {
+                        // Ignore missing receivers (content script not injected on that tab)
+                        if (err && err.message && err.message.includes("Receiving end does not exist")) {
+                            return;
+                        }
+                        bgWarn(`[Broadcast] Failed to send '${type}' to tab ${tab.id}:`, err)
+                    })
             );
 
         await Promise.all(tasks);
