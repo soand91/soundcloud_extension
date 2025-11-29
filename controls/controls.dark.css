@@ -28,78 +28,10 @@
     height: 48px;
     visibility: visible;
     display: block;
-    background-color: #f3f3f3;
-    color: #121212;
+    background-color: #303030;
+    color: #fff;
     forced-color-adjust: none;
     padding-inline-end: var(--page-scrollbar-missing, 0px);
-}
-
-:host(.dark-mode) .controller_inner {
-    background-color: #303030;
-    color: #fff;
-}
-:host(.dark-mode) .controller_elements,
-:host(.dark-mode) .control_buttons {
-    color: white;
-    background: transparent;
-}
-:host(.dark-mode) .control_buttons:hover {
-    background: transparent;
-    color: rgba(255, 255, 255, 0.4);
-}
-:host(.dark-mode) .play_pause {
-    background: white;
-    color: black;
-}
-:host(.dark-mode) .play_pause:hover {
-    color: gray;
-    background: white;
-}
-:host(.dark-mode) .ext-icon,
-:host(.dark-mode) .int-icon {
-    background: #303030;
-    color: white;
-}
-:host(.dark-mode) .progressBackground {
-    background-color: rgba(255, 255, 255, 0.15);
-}
-:host(.dark-mode) .volume_button {
-    color: #fff;
-}
-:host(.dark-mode) .volume_button:hover {
-    color: gray;
-}
-:host(.dark-mode) .volume_slider {
-    border-color: rgba(255, 255, 255, 0.15);
-    background: #303030;
-}
-:host(.dark-mode) .volume_sliderBackground {
-    background-color: #1f1f1f;
-}
-:host(.dark-mode) .volume_sliderHandle {
-    background-color: #1f1f1f;
-}
-:host(.dark-mode) .titleLink {
-    color: #fff;
-}
-:host(.dark-mode) .titleLink:hover {
-    color: rgba(255, 255, 255, 0.4);
-}
-:host(.dark-mode) .artistLink:hover {
-    color: rgba(153, 153, 153, 0.4);
-}
-:host(.dark-mode) .controller_queue {
-    background-color: rgb(18, 18, 18);
-    color: white;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-}
-:host(.dark-mode) .queue_clear,
-:host(.dark-mode) .queue_hide,
-:host(.dark-mode) .queue_title {
-    color: white;
-}
-:host(.dark-mode) .queue_hide {
-    background-color: #303030;
 }
 .controller_wrapper {
     margin: 0 auto;
@@ -118,7 +50,7 @@
     height: 100%;
     align-items: center;
     visibility: visible;
-    color: #121212;
+    color: white;
 }
 .skip_prev, .skip_next {
     width: 24px; height: 24px;
@@ -129,10 +61,10 @@
     width: 32px; height: 32px;
     padding: 6px;
     margin-right: 16px;
-    background: #121212;
+    background: white;
     border: none;
     cursor: pointer;
-    color: #fff;
+    color: black;
     display: block;
     position: static;
     align-self: center;
@@ -156,10 +88,10 @@
     margin: 0;
 }
 .repeat.off {
-    color: #121212;
+    color: white;
 }
 .repeat.off:hover {
-    color: rgba(18, 18, 18, 0.4);
+    color: gray;
     transition: color 0.2s;
 }
 .repeat.one, .repeat.all {
@@ -194,21 +126,21 @@
     background: transparent;
     border: none;
     cursor: pointer;
-    color: #121212;
+    color: white;
     display: inline-flex;
     position: relative;
     align-self: center;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
-    transition: color 0.2s ease;
 }
 .control_buttons:hover {
-    color: rgba(18, 18, 18, 0.4);
-    background: transparent;
-    transition: color 0.2s ease;
+    color: gray;
+    transition: color 0.2s;
 }
-.play_pause:hover {    color: #fff;    background: #666;    transition: background-color 0.2s ease, color 0.2s ease; }
+.play_pause:hover {
+    color: gray;
+    transition: color 0.2s;
+}
 .collapse-btn {
     margin-left: auto;
     bottom: 0; right: 0;
@@ -229,10 +161,10 @@
     bottom: 0; left: 0;
     margin: 12px;
     width: 24px; height: 24px;
-    background: #f3f3f3;
+    background: #303030;
     z-index: 999999;
     display: flex; align-items: center; justify-content: center;
-    color: #121212;
+    color: white;
     font-size: 0.85em;
     transition: opacity 1s; 
     opacity: 0; pointer-events: none;
@@ -282,7 +214,7 @@
 .progressBackground {
     position: absolute;
     width: 521.3px; height: 2px;
-    background-color: rgba(0, 0, 0, 0.15);
+    background-color: rgba(255, 255, 255, 0.15);
 }
 .progressBar {
     position: absolute;
@@ -325,7 +257,7 @@
     margin: 0; padding: 16px 4px;
     min-width: 24px; min-height: 24px;
     border: none; cursor: pointer;
-    background: transparent; color: #121212;
+    background: transparent; color: #fff;
     display: inline-flex; align-items: center; justify-content: center;
     transition: color 0.2s ease, transform 0.12s ease;
 }
@@ -352,8 +284,8 @@
     position: absolute; cursor: pointer;
     left: -9px; bottom: 50px;
     width: 40px; height: 152px;
-    border: 1px solid rgba(0, 0, 0, 0.15); border-radius: 6px;
-    background: #f3f3f3;
+    border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 6px;
+    background: #303030;
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
     overflow: visible; z-index: 2147483647; outline: 0;
 
@@ -374,7 +306,7 @@
     margin-left: 18px;
     left: 0; bottom: 13px;
     width: 4px; height: 120px;
-    background-color: #e0e0e0;
+    background-color: #1f1f1f;
 
     opacity: 1; 
     transition: opacity 0.1s linear; transition-delay: 0.1s;
@@ -397,7 +329,7 @@
     margin-left: 12px; box-sizing: border-box;
     width: 16px; height: 16px;
     border: 1.5px solid #f50; border-radius: 100%;
-    background-color: #f3f3f3;
+    background-color: #1f1f1f;
 
     opacity: 1;
     transition: opacity 0.1s linear; transition-delay: 0.1s;
@@ -415,13 +347,9 @@
     height: 0;
     border-left: 10px solid transparent;
     border-right: 10px solid transparent;
-    border-top: 14px solid #f3f3f3;
-    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.15));
-    pointer-events: auto;
-}
-:host(.dark-mode) .volume_slider::before {
     border-top: 14px solid #303030;
     filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.35));
+    pointer-events: auto;
 }
 .volume_slider::after {
     content: "";
@@ -466,7 +394,7 @@
 .titleLink {
     display: flex; align-items: center;
     min-width: 0; width: 100%; height: 17px;
-    color: #121212; cursor: pointer;
+    color: #fff; cursor: pointer;
     white-space: nowrap;
     font-weight: 600; font-size: 0.85714em;
     line-height: 16px;
@@ -479,7 +407,9 @@
     0% { transform: translate(0%); }
     100% { transform: translate(-100%); }
 }
-.artistLink:hover {    color: rgba(102, 102, 102, 0.4); }
+.artistLink:hover {
+    color: rgba(255, 255, 255, 0.15);
+}
 .soundBadge_buttons_container {
     display: flex;
 }
@@ -489,24 +419,14 @@
     justify-content: center; cursor: pointer;
     margin-right: 8px; padding: 6px 12px;
     min-width: 16px; min-height: 16px;
-    background-color: transparent; color: #121212;
+    background-color: transparent; color: #fff;
     border: none;
 }
 .soundBadge_like svg, .soundBadge_follow svg, .soundBadge_queue svg {
     width: 16px; height: 16px;
 }
 .soundBadge_like:hover, .soundBadge_follow:hover, .soundBadge_queue:hover {
-    color: rgba(18, 18, 18, 0.4);
-}
-:host(.dark-mode) .soundBadge_like,
-:host(.dark-mode) .soundBadge_follow,
-:host(.dark-mode) .soundBadge_queue {
-    color: #fff;
-}
-:host(.dark-mode) .soundBadge_like:hover,
-:host(.dark-mode) .soundBadge_follow:hover,
-:host(.dark-mode) .soundBadge_queue:hover {
-    color: rgba(255, 255, 255, 0.4);
+    color: rgba(255, 255, 255, 0.15);
 }
 .soundBadge_like.liked, .soundBadge_follow.followed {
     color: #f50;
@@ -525,9 +445,9 @@
     /* opacity: 0; */
     height: 532px;
     max-height: calc(100vh - 80px);
-    background-color: #f3f3f3;
-    color: #121212;
-    border: 1px solid rgba(0, 0, 0, 0.15);
+    background-color: rgb(18, 18, 18);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 6px;
 }
 .controller_queue {
@@ -548,7 +468,7 @@
     border: none;
     cursor: pointer; align-self: center;
     padding: 6px;
-    background-color: initial; color: #121212;
+    background-color: initial; color: white;
 }
 .queue_title {
     flex-grow: 1;
@@ -565,7 +485,7 @@
 .queue_hide {
     padding: 6px; margin-right: 16px;
     min-width: 24px; min-height: 24px;
-    border-radius: 50%; background-color: #dcdcdc; 
+    border-radius: 50%; background-color: #303030; 
 }
 .queue_hide svg {
     width: 24px; height: 24px;
@@ -586,4 +506,3 @@
     width: 480px; 
     border-radius: 0 0 4px 4px;
 }
-
