@@ -1,31 +1,38 @@
 *, *::before, *::after {
   box-sizing: border-box;
 }
-body {
+body, html {
     width: 320px; height: 400px;
     position: relative;
     font-family: "Inter";
     font-weight: 600;
     font-size: 14px;
+    display: inline-flex;
+    margin: 0; padding: 0;
 }
 h1 {
-    font-size: 20px;
-    margin-top: 6px; margin-bottom: 6x;
+    font-size: 18px; padding: 0 5px; padding-top: 5px;
+    margin-top: 0; margin-bottom: 6px;
 }
 h2 {
     font-size: 16px;
     margin-top: 6px; margin-bottom: 2.5px;
 }
 .popup-wrapper {
-    margin: 10px; padding: 5px;
+    padding: 5px; 
     min-width: 290px; min-height: 370px;
+    width: 100%; height: 100%;
     position: fixed;
     display: flex; flex-direction: column;
 }
 .settings {
     margin-bottom: 2.5px;
     display: flex; flex-direction: column;
-    gap: 7.5px; 
+    gap: 7.5px; padding: 0 5px;
+}
+.toolbar-default, .active-default, .theme-default {
+    display: flex; flex-direction: row;
+    align-items: center; gap: 2px;
 }
 .switch {
     width: 42.5px; height: 20px;
@@ -64,7 +71,7 @@ input:checked + .slider:before {
     transform: translateX(22.5px);
 }
 .SC-tabs-list {
-    display: flex;
+    display: flex; padding: 0 5px;
 }
 h3 {
     font-size: 14px;
