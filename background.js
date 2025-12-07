@@ -1,5 +1,4 @@
 /// ======== Constants and State ========
-let soundcloudTabs = new Map();
 let activeSoundCloudTabId = null;
 let tabStates = {};
 let pendingUpdateCache = {};
@@ -10,6 +9,7 @@ const DEFAULT_SETTINGS = {
     'theme-default-toggle': false
 }
 const SETTINGS_KEYS = Object.keys(DEFAULT_SETTINGS);
+let activeTabFollowsFocus = true; // true = follow browser focus, false = popup-selected
 
 const DEBUG = true;
 function bgLog(...args) {
@@ -20,6 +20,51 @@ function bgWarn(...args) {
 }
 function bgError(...args) {
     if (DEBUG) console.error("[Background]", ...args);
+}
+
+// Send fire-and-forget messages to extension pages (popup/options)
+function notifyExtensionPages(payload) {
+    browser.runtime.sendMessage({ __origin: "bg-push", ...payload }).catch(() => {
+        // Ignore if no extension page is listening
+    });
+}
+
+// Return a sorted list of SoundCloud tab summaries derived from tabStates
+function deriveSoundCloudTabsFromState() {
+    const activeId = activeSoundCloudTabId ?? null;
+    const tabs = Object.entries(tabStates)
+        .filter(([, state]) => state?.isSoundCloud)
+        .map(([tabId, state]) => ({
+            tabId: Number(tabId),
+            pageTitle: state.pageTitle || state.songTitle || "(Untitled)",
+            url: state.url || null,
+            isActive: Number(tabId) === activeId,
+            playpause: state.playpause || "paused",
+            songTitle: state.songTitle || null,
+            songArtist: state.songArtist || null,
+            lastUpdated: state.lastUpdated || 0
+        }))
+        .sort((a, b) => {
+            if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+            return (b.lastUpdated || 0) - (a.lastUpdated || 0);
+        });
+    return { tabs, activeId };
+}
+
+function notifyTabStateUpdate(tabId) {
+    if (!tabStates[tabId]) return;
+    notifyExtensionPages({
+        type: "tab-state-updated",
+        tabId: Number(tabId),
+        state: tabStates[tabId]
+    });
+}
+
+function notifyTabRemoved(tabId) {
+    notifyExtensionPages({
+        type: "tab-state-removed",
+        tabId: Number(tabId)
+    });
 }
 
 
@@ -42,6 +87,7 @@ async function getMergedSettings() {
     const stored = await browser.storage.local.get(SETTINGS_KEYS);
     const merged = { ...DEFAULT_SETTINGS, ...stored };
     bgLog("[Settings] Retreived and merged settings:", merged);
+    applyActiveTabSettingBackground(merged['active-tab-toggle']);
     return merged;
 }
 // Helper that applies all Settings to all tabs
@@ -61,6 +107,11 @@ async function applySettingsToAllTabs(settings) {
         }
         bgLog(`[Settings] Broadcast attempt to ${tabs.length} tabs`)
     })
+}
+function applyActiveTabSettingBackground(prefersPopupSelect) {
+    // true => popup-selected mode; false => follow browser focus
+    activeTabFollowsFocus = !prefersPopupSelect;
+    bgLog("[Settings] Active tab follows focus:", activeTabFollowsFocus);
 }
 // Helper that detects all already-open SoundCloud tabs 
 async function initializeSoundCloudTabs() {
@@ -155,7 +206,9 @@ async function handleTabNavigation(tabId, changeInfo, tab) {
             pageTitle: tab.title
         }, { force: true });
         if (changeInfo.status === "complete" || changeInfo.url) {
-            if (activeSoundCloudTabId !== tabId) {
+            if (activeTabFollowsFocus && activeSoundCloudTabId !== tabId) {
+                setActiveSoundCloudTab(tabId);
+            } else if (!activeSoundCloudTabId) {
                 setActiveSoundCloudTab(tabId);
             }
             injectControlsIntoTab(tabId);
@@ -167,6 +220,9 @@ async function handleTabNavigation(tabId, changeInfo, tab) {
 }
 // Helper that updates active tab if needed 
 async function handleTabActivation(tabId) {
+    if (!activeTabFollowsFocus) {
+        return;
+    }
     try {
         const tab = await browser.tabs.get(tabId);
         if (tab.url && tab.url.includes("soundcloud.com") && tabId !== activeSoundCloudTabId) {
@@ -198,9 +254,11 @@ async function setActiveSoundCloudTab(tabId) {
     ensureTabState(tabId);
     // Clear isActive from all then set isActive to specific tab
     for (const id in tabStates) {
-        tabStates[id].isActive = false;
+        if (tabStates[id].isActive) {
+            updateTabState(Number(id), { isActive: false }, { force: true, suppressTimeStamp: true });
+        }
     }
-    tabStates[tabId].isActive = true;
+    updateTabState(tabId, { isActive: true }, { force: true, suppressTimeStamp: true });
     // Persist
     try {
         await browser.storage.local.set({ activeSoundCloudTabId: tabId });
@@ -208,6 +266,7 @@ async function setActiveSoundCloudTab(tabId) {
     } catch (err) {
         bgWarn("[ActiveTab] Failed to persist active tab ID:", err);
     }
+    notifyExtensionPages({ type: "active-soundcloud-tab-changed", tabId });
     // Broadcast known state if present
     const knownState = tabStates[tabId];
     if (knownState) {
@@ -322,6 +381,7 @@ function removeTabAndReassignIfActive(tabId) {
     if (wasSoundCloud) {
         delete tabStates[tabId];
         bgLog("[TabCleanup] Removed SC tab from tabStates:", tabId);
+        notifyTabRemoved(tabId);
     }
 
     if (wasActive) {
@@ -353,6 +413,7 @@ function updateAllStatesForActiveTab() {
 browser.runtime.onStartup.addListener(async () => {
     const settings = await getMergedSettings();
     applySettingsToAllTabs(settings);
+    await restoreTabStatesFromStorage();
     await restoreActiveSoundCloudTab();
     await initializeSoundCloudTabs(); //TODO
     bgLog("[Startup] Settings applied and tab state restored");
@@ -368,6 +429,7 @@ browser.runtime.onInstalled.addListener(async ({ reason, previousVersion }) => {
     }
     const settings = await getMergedSettings();
     applySettingsToAllTabs(settings);
+    await restoreTabStatesFromStorage();
     await restoreActiveSoundCloudTab();
     await initializeSoundCloudTabs(); //TODO
 })
@@ -403,6 +465,9 @@ browser.storage.onChanged.addListener((changes, area) => {
     if (Object.keys(partial).length === 0) return;
 
     applySettingsToAllTabs(partial);
+    if (Object.prototype.hasOwnProperty.call(partial, 'active-tab-toggle')) {
+        applyActiveTabSettingBackground(partial['active-tab-toggle']);
+    }
     bgLog("[Settings Change] Applied partial settings:", partial);
 })
 
@@ -434,13 +499,14 @@ const fieldMap = {
 // Central message handler 
 async function handleRuntimeMessage(msg, sender, sendResponse) {
     if (!msg || typeof msg !== "object" || typeof msg.type !== "string") return;
+    if (msg.__origin === "bg-push") return;
 
     const tabId = sender?.tab?.id || msg.tabId;
-    if (!tabId) return;
 
     // 1. For the state-updated messages
     const fieldEntry = fieldMap[msg.type];
     if (fieldEntry) {
+        if (!tabId) return;
         bgLog("message received:", {
             type: msg.type,
             state: msg.state,
@@ -456,6 +522,7 @@ async function handleRuntimeMessage(msg, sender, sendResponse) {
     // 2. For all others
     switch (msg.type) {
         case "volume-state-updated": {
+            if (!tabId) return;
             const volState = msg.state || {};
             const percentVal = (typeof volState.percent === "number")
                 ? volState.percent
@@ -491,26 +558,13 @@ async function handleRuntimeMessage(msg, sender, sendResponse) {
         case "get-all-states": // For unified states
             bgLog("[State] Responding to get-all-states with:", tabStates)
             return tabStates;
-        case "get-soundcloud-tabs": //TODO
-            if (!soundcloudTabs || !(soundcloudTabs instanceof Map)) {
-                bgWarn("[Background] soundcloudTabs is undefined or invalid");
-                return ({ tabs: [], error: "No soundcloudTabs map available." });
-            }
-            const activeId = activeSoundCloudTabId ?? null;
-
-            const tabs = Array.from(soundcloudTabs.entries()).map(([tabId, info]) => {
-                const tabObj = {
-                    tabId, 
-                    pageTitle: info?.pageTitle || "(Untitled)",
-                    url: info?.url || "(No URL)",
-                    isActive: tabId === activeId,
-                };
-                bgLog(`[Background] Tab ID: ${tabId}`, tabObj);
-                return { tabs };
-            });
-            bgLog(`[Background] Returning ${tabs.length} SoundCloud tab(s). Active ID: ${activeId}`);
-            return { tabs };        
-        case "set-active-soundcloud-tabs": //TODO
+        case "get-soundcloud-tabs": {
+            const result = deriveSoundCloudTabsFromState();
+            bgLog(`[Background] Returning ${result.tabs.length} SoundCloud tab(s). Active ID: ${result.activeId}`);
+            return result;
+        }
+        case "set-active-soundcloud-tab": // singular for popup selection
+        case "set-active-soundcloud-tabs": //TODO legacy plural
             await setActiveSoundCloudTab(msg.tabId);
             return { success: true };
         case "playpause-state-get-request":
@@ -693,6 +747,26 @@ async function handleRuntimeMessage(msg, sender, sendResponse) {
                     .catch(err => bgError("[Timeline seek request] Failed to send seek", err));
             });
             return true;
+        case "focus-soundcloud-tab": {
+            const targetId = Number(msg.tabId);
+            if (!targetId || Number.isNaN(targetId)) {
+                bgWarn("[Focus] Invalid tabId provided");
+                return { success: false };
+            }
+            try {
+                const tab = await browser.tabs.get(targetId);
+                if (tab?.windowId) {
+                    await browser.windows.update(tab.windowId, { focused: true });
+                }
+                await browser.tabs.update(targetId, { active: true });
+                await setActiveSoundCloudTab(targetId);
+                bgLog("[Focus] Focused SoundCloud tab:", targetId);
+                return { success: true };
+            } catch (err) {
+                bgWarn("[Focus] Failed to focus SoundCloud tab:", targetId, err);
+                return { success: false };
+            }
+        }
 
         default:
             bgWarn("[Message] Unhandled message type:", msg.type);
@@ -788,6 +862,8 @@ function updateTabState(tabId, partialState, { force = false, suppressTimeStamp 
     bgLog(`[Update] Applied to tab ${tabId}: `, JSON.stringify(partialState));
     delete pendingUpdateCache[tabId];
 
+    persistTabStates();
+    notifyTabStateUpdate(tabId);
+
     return true;
 }
-
