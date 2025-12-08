@@ -32,3 +32,5 @@ web-ext run # to run on temporary Firefox profile
 web-ext lint # to lint
 web-ext build # to build
 ```
+## License
+This project is licensed under the MIT License - see the [License](LICENSE) file for details.
