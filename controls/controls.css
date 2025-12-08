@@ -150,6 +150,9 @@
 .shuffle.active {
     color: #f50;
 }
+:host(.dark-mode) .shuffle.active {
+    color: #f50;
+}
 .repeat {
      width: 24px; height: 24px;
     padding: 0;
@@ -162,7 +165,14 @@
     color: rgba(18, 18, 18, 0.4);
     transition: color 0.2s;
 }
+:host(.dark-mode) .repeat.off {
+    color: #fff;
+}
 .repeat.one, .repeat.all {
+    color: #f50;
+}
+:host(.dark-mode) .repeat.one,
+:host(.dark-mode) .repeat.all {
     color: #f50;
 }
 .repeat.one.control_buttons:hover, .repeat.all.control_buttons:hover {
@@ -509,6 +519,10 @@
     color: rgba(255, 255, 255, 0.4);
 }
 .soundBadge_like.liked, .soundBadge_follow.followed {
+    color: #f50;
+}
+:host(.dark-mode) .soundBadge_like.liked,
+:host(.dark-mode) .soundBadge_follow.followed {
     color: #f50;
 }
 .soundBadge_queue {
