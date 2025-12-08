@@ -334,9 +334,10 @@ h3 {
     grid-column: 1 / -1;
     /* outline: 1px dashed green; */
     padding: 0px 5px 0px 5px;
-    max-height: 220px;
+    max-height: 219px;
     display: grid;
     grid-template-rows: 130px 90px;
+    border-bottom: 1px var(--accent) solid;
 }
 #send-container {
     grid-column: span 2;
@@ -356,14 +357,25 @@ h3 {
     border-bottom-left-radius: 8px;
     border-bottom-right-radius: 8px;
     cursor: pointer;
+    padding: 4px 8px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    min-width: 75px;
 }
 #page {
     border-bottom-left-radius: 8px;
     border-bottom-right-radius: 8px;
     cursor: pointer;
+    padding: 4px 8px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    min-width: 75px;
 }
 .selected {
-    color: white;
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--card);
+    box-shadow: 0 0 0 1px var(--accent-soft);
 }
 .hidden {
     display: none;
@@ -395,13 +407,15 @@ input {
 .report-text-wrapper {
     display: flex;
     flex-direction: column;
-    position: relative;
+    position: relative; 
+    max-height: 75px;
 }
 .report-radio {
     font-size: 12px;
 }
 textarea {
     resize: none;
+    height: 60px;
 }
 textarea::placeholder {
     font-family: 'Inter', sans-serif;

@@ -44,7 +44,7 @@
                 <div>
                     <h3>Report Page or UI Issue</h3>
                     <label for="report-url" class="report-label">Page URL</label>
-                    <input type="text" id="report-url" class="report-input" readonly />
+                    <input type="text" id="report-url" class="report-input" placeholder="Detecting current page..." />
                     <fieldset class="report-fieldset">
                     <legend class="report-legend">What seems broken?</legend>
                     <label class="report-radio">
@@ -61,38 +61,34 @@
                     </label>
                     </fieldset>
                 </div>
-                <div>
-                    <div class="report-text-wrapper">
+                <div class="report-text-wrapper">
                     <label for="additional-info" class="report-label">Additional details</label>
                     <textarea id="additional-info" class="report-textarea" rows="3" placeholder="Optional additional details..."></textarea>
-                    </div>
                 </div>
                 </div>
                 <div id="playback-info" class="report-info hidden">
-                <div>
-                    <h3>Report Playback or Messaging Issue</h3>
-                    <fieldset class="report-fieldset">
-                    <legend class="report-legend">What seems broken?</legend>
-                    <label class="report-radio">
-                        <input type="radio" name="messaging-issue" value="no-playback-response"/>Playback buttons do nothing
-                    </label>
-                    <label class="report-radio">
-                        <input type="radio" name="messaging-issue" value="audio-desync"/>Audio is out of sync with controls
-                    </label>
-                    <label class="report-radio">
-                        <input type="radio" name="messaging-issue" value="no-tab-communication"/>Extension is playing from the wrong tab
-                    </label>
-                    <label class="report-radio">
-                        <input type="radio" name="messaging-issue" value="other"/>Something else
-                    </label>
-                    </fieldset>
-                </div>
-                <div>
-                    <div class="report-text-wrapper">
-                    <label for="messaging-info" class="report-label">Additional details</label>
-                    <textarea id="messaging-info" class="report-textarea" rows="3" placeholder="Optional additional details..."></textarea>
+                    <div>
+                        <h3>Report Playback or Messaging Issue</h3>
+                        <fieldset class="report-fieldset">
+                        <legend class="report-legend">What seems broken?</legend>
+                        <label class="report-radio">
+                            <input type="radio" name="messaging-issue" value="no-playback-response"/>Playback buttons do nothing
+                        </label>
+                        <label class="report-radio">
+                            <input type="radio" name="messaging-issue" value="audio-desync"/>Audio is out of sync with controls
+                        </label>
+                        <label class="report-radio">
+                            <input type="radio" name="messaging-issue" value="no-tab-communication"/>Extension is playing from the wrong tab
+                        </label>
+                        <label class="report-radio">
+                            <input type="radio" name="messaging-issue" value="other"/>Something else
+                        </label>
+                        </fieldset>
                     </div>
-                </div>
+                    <div class="report-text-wrapper">
+                      <label for="messaging-info" class="report-label">Additional details</label>
+                      <textarea id="messaging-info" class="report-textarea" rows="3" placeholder="Optional additional details..."></textarea>
+                    </div>
                 </div>
                 <span id="send-container">
                 <button id="send-Btn">Send</button>
@@ -101,8 +97,9 @@
                 <span id="playback" class="report-tab">Playback</span>
                 <span id="page" class="report-tab selected">Page/UI</span>
             </div>
+            <div class="report-overlay"></div>
             <div class="report-section">
-                <h3>Broken page? Report here</h3>
+                <h3>Broken page? Report here &rarr;</h3>
                 <span id="report-Btn">
                 <svg class="report-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" stroke="currentColor" fill="currentColor">
                     <path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zm0-384c13.3 0 24 10.7 24 24l0 112c0 13.3-10.7 24-24 24s-24-10.7-24-24l0-112c0-13.3 10.7-24 24-24zM224 352a32 32 0 1 1 64 0 32 32 0 1 1 -64 0z"/>

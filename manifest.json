@@ -1,12 +1,9 @@
 {
     "manifest_version": 3,
-    "name": "version 0",
-    "version": "0.1",
-    "description": "test one",
+    "name": "Soundcloud UI Extender",
+    "version": "1.0.0",
+    "description": "Adds convenience playback controls for SoundCloud on other websites.",
     "background": {
-        "scripts": [
-            "background.js"
-        ],
         "service_worker": "background.js",
         "type": "module"
     },
@@ -31,10 +28,11 @@
         "tabs", "activeTab", "scripting", "storage"
     ],
     "host_permissions": [
-        "<all_urls>", "*://soundcloud.com/*"
+        "https://*/*",
+        "http://*/*"
     ],
     "web_accessible_resources": [{
         "resources": ["controls/controls.html", "controls/controls.css", "content/soundcloud-controls.js", "controls/Inter-SemiBold.woff"],
-        "matches": ["<all_urls>"]
+        "matches": ["https://*/*", "http://*/*"]
     }]
 }

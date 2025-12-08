@@ -6,7 +6,8 @@ let persistTimer = null;
 const DEFAULT_SETTINGS = {
     'start-open-toggle': false,
     'active-tab-toggle': false,
-    'theme-default-toggle': false
+    'theme-default-toggle': false,
+    'report-webhook-url': '""'
 }
 const SETTINGS_KEYS = Object.keys(DEFAULT_SETTINGS);
 let activeTabFollowsFocus = true; // true = follow browser focus, false = popup-selected
@@ -765,6 +766,27 @@ async function handleRuntimeMessage(msg, sender, sendResponse) {
             } catch (err) {
                 bgWarn("[Focus] Failed to focus SoundCloud tab:", targetId, err);
                 return { success: false };
+            }
+        }
+        case "send-report-webhook": {
+            const { payload } = msg;
+            const stored = await browser.storage.local.get("report-webhook-url");
+            const webhookUrl = payload?.overrideWebhook || stored["report-webhook-url"] || null;
+            if (!webhookUrl) {
+                bgWarn("[Report] No webhook URL configured");
+                return { success: false, error: "No webhook URL configured" };
+            }
+            try {
+                await fetch(webhookUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                bgLog("[Report] Webhook sent");
+                return { success: true };
+            } catch (err) {
+                bgWarn("[Report] Failed to send webhook:", err);
+                return { success: false, error: err?.message || "Failed to send webhook" };
             }
         }
 

@@ -495,7 +495,7 @@
 .soundBadge_like svg, .soundBadge_follow svg, .soundBadge_queue svg {
     width: 16px; height: 16px;
 }
-.soundBadge_like:hover, .soundBadge_follow:hover, .soundBadge_queue:hover {
+.soundBadge_like:hover, .soundBadge_follow:hover, .soundBadge_queue:not(.disabled):hover {
     color: rgba(18, 18, 18, 0.4);
 }
 :host(.dark-mode) .soundBadge_like,
@@ -505,7 +505,7 @@
 }
 :host(.dark-mode) .soundBadge_like:hover,
 :host(.dark-mode) .soundBadge_follow:hover,
-:host(.dark-mode) .soundBadge_queue:hover {
+:host(.dark-mode) .soundBadge_queue:not(.disabled):hover {
     color: rgba(255, 255, 255, 0.4);
 }
 .soundBadge_like.liked, .soundBadge_follow.followed {
@@ -514,6 +514,13 @@
 .soundBadge_queue {
     margin-right: 0; padding: 4px 0;
     padding-left: 8px;
+}
+.soundBadge_queue.disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.soundBadge_queue.disabled:hover {
+    color: inherit;
 }
 
 

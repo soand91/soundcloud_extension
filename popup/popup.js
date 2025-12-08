@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     tabEmptyElem = document.getElementById('tab-empty');
 
     await loadPopupFont();
+    setDetectedUrlPlaceholder();
     await loadInitialTabStates();
     setupRuntimeListeners();
     setupSettingsToggles();
@@ -195,9 +196,25 @@ function setupSettingsToggles() {
 function setupReportUI() {
     const reportBtn = document.getElementById('report-Btn');
     const reportCard = document.querySelector('.report-card');
+    const reportOverlay = document.querySelector('.report-overlay');
+    const sendBtn = document.getElementById('send-Btn');
     reportBtn.addEventListener('click', () => {
-        reportCard.classList.toggle('card-shown');
+        const willShow = !reportCard.classList.contains('card-shown');
+        reportCard.classList.toggle('card-shown', willShow);
+        reportOverlay?.classList.toggle('shown', willShow);
     });
+    document.addEventListener('click', (e) => {
+        if (!reportCard.classList.contains('card-shown')) return;
+        const isInsideCard = reportCard.contains(e.target);
+        const isReportBtn = reportBtn.contains(e.target);
+        if (!isInsideCard && !isReportBtn) {
+            reportCard.classList.remove('card-shown');
+            reportOverlay?.classList.remove('shown');
+        }
+    });
+    if (sendBtn) {
+        sendBtn.addEventListener('click', handleSendReport);
+    }
     // Report Menu Tab Logic
     let selectedTab = "page"
     const tabViews = {
@@ -236,6 +253,20 @@ function applyTheme(isDark) {
     document.body.classList.toggle('theme-dark', !!isDark);
 }
 
+async function setDetectedUrlPlaceholder() {
+    const urlInput = document.getElementById('report-url');
+    if (!urlInput) return;
+    try {
+        const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+        const activeUrl = tabs[0]?.url;
+        if (activeUrl) {
+            urlInput.placeholder = activeUrl;
+        }
+    } catch (err) {
+        console.warn("Failed to detect current tab URL:", err);
+    }
+}
+
 function formatTimeLabel(currentSeconds, durationSeconds) {
     const fmt = (s) => {
         if (typeof s !== "number" || !Number.isFinite(s) || s < 0) return "--:--";
@@ -247,4 +278,37 @@ function formatTimeLabel(currentSeconds, durationSeconds) {
     const dur = fmt(durationSeconds);
     if (cur === "--:--" && dur === "--:--") return "--:-- / --:--";
     return `${cur} / ${dur}`;
+}
+
+async function handleSendReport() {
+    const activeTabId = document.querySelector('.report-tab.selected')?.id;
+    const urlInput = document.getElementById('report-url');
+    const pageIssue = document.querySelector('input[name="issue-type"]:checked');
+    const msgIssue = document.querySelector('input[name="messaging-issue"]:checked');
+    const additional = document.getElementById('additional-info')?.value?.trim() || '';
+    const messaging = document.getElementById('messaging-info')?.value?.trim() || '';
+    const pageUrl = urlInput?.value?.trim() || urlInput?.placeholder || '';
+
+    const payload = {
+        username: "SoundCloud UI Reporter",
+        embeds: [{
+            title: activeTabId === "playback" ? "Playback / Messaging Issue" : "Page / UI Issue",
+            color: activeTabId === "playback" ? 0xff7d3c : 0xf55a00,
+            fields: [
+                { name: "Page URL", value: pageUrl || "N/A" },
+                { name: "Issue Type", value: activeTabId === "playback" ? (msgIssue?.value || "Unspecified") : (pageIssue?.value || "Unspecified") },
+                { name: "Details", value: activeTabId === "playback" ? (messaging || "N/A") : (additional || "N/A") }
+            ],
+            timestamp: new Date().toISOString()
+        }]
+    };
+
+    try {
+        const res = await browser.runtime.sendMessage({ type: "send-report-webhook", payload });
+        if (!res?.success) {
+            console.warn("Report webhook failed:", res?.error);
+        }
+    } catch (err) {
+        console.warn("Report webhook send failed:", err);
+    }
 }
