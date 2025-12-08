@@ -8,16 +8,19 @@
     --text: #111;
     --muted: #666;
     --border: #e5e5e5;
+    --border-strong: #d0d0d0;
     --accent: #f50;
     --accent-soft: rgba(245, 80, 0, 0.35);
     --shadow-soft: rgba(245, 80, 0, 0.15);
+    --card-shadow: 0 12px 30px rgba(0, 0, 0, 0.16);
     --control-bg: #fff;
     --row-active-bg: #fff8f4;
-    --report-bg: rgb(251, 152, 152);
+    --report-bg: #fff;
     --report-text: #111;
     --switch-track: #cccccc;
     --switch-track-checked: #f50;
     --switch-thumb: #ffffff;
+    --overlay: rgba(0, 0, 0, 0.08);
 }
 .theme-dark {
     --bg: #0f1116;
@@ -26,9 +29,11 @@
     --text: #f2f4fb;
     --muted: #9ba3b5;
     --border: #272d39;
+    --border-strong: #353c4b;
     --accent: #ff7d3c;
     --accent-soft: rgba(255, 125, 60, 0.45);
     --shadow-soft: rgba(255, 125, 60, 0.18);
+    --card-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
     --control-bg: #1d2230;
     --row-active-bg: #202738;
     --report-bg: #2a3041;
@@ -36,6 +41,7 @@
     --switch-track: #2b3240;
     --switch-track-checked: #ff7d3c;
     --switch-thumb: #f2f4fb;
+    --overlay: rgba(0, 0, 0, 0.35);
 }
 body, html {
     width: 320px; height: 400px;
@@ -292,10 +298,12 @@ h3 {
 }
 .report-card {
     z-index: 1000;
-    width: 290px;
+    width: calc(100% - 20px);
     height: 250px;
     margin-bottom: 5px;
     border-radius: 6px;
+    border: 1px solid var(--border-strong);
+    box-shadow: var(--card-shadow);
     display: none;
     grid-template-rows: 4fr 30px;
     grid-template-columns: repeat(5, 1fr);
@@ -304,10 +312,23 @@ h3 {
     color: var(--report-text);
     z-index: 10;
     bottom: 31px;
-    left: 0px;
+    left: 10px;
 }
 .report-card.card-shown {
     display: grid; 
+}
+.report-overlay {
+    position: absolute;
+    inset: 0;
+    background: var(--overlay);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    z-index: 5;
+}
+.report-overlay.shown {
+    opacity: 1;
+    pointer-events: auto;
 }
 .report-info {
     grid-column: 1 / -1;
@@ -320,6 +341,7 @@ h3 {
 #send-container {
     grid-column: span 2;
     display: flex;
+    padding-left: 5px;
 }
 #send-Btn {
     height: 20px; width: 42.5px;
@@ -331,13 +353,11 @@ h3 {
     margin-bottom: auto;
 }
 #playback {
-    background: red;
     border-bottom-left-radius: 8px;
     border-bottom-right-radius: 8px;
     cursor: pointer;
 }
 #page {
-    background: lightblue;
     border-bottom-left-radius: 8px;
     border-bottom-right-radius: 8px;
     cursor: pointer;
@@ -354,6 +374,7 @@ h3 {
 }
 .report-fieldset {
     margin: 0;
+    margin-top: 5px;
     border: none;
     border-top: 1px dashed;
     padding: 0;
