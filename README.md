@@ -32,5 +32,20 @@ web-ext run # to run on temporary Firefox profile
 web-ext lint # to lint
 web-ext build # to build
 ```
+This repo does not ship with a real bug-report webhook URL.
+To run the extension with bug reporting enabled:
+1. Copy the sample file:
+```bash
+cp config.sample.js config.local.js
+```
+2. Edit `config.local.js` and set `WEBHOOK_URL` to your own endpoint (for example a Discord webhook):
+```js
+export const WEBHOOK_URL = "https://discord.com/api/webhooks/....";
+```
+3. Build andrun the extension as usual:
+```bash
+web-ext run
+```
+If you skip this step, the extension will fail to load because `config.local.js` is missing. If you don't care about the bug-report feature, you can also comment out the import and usage of `WEBHOOK_URL` at the top of `background.js`.
 ## License
 This project is licensed under the MIT License - see the [License](LICENSE) file for details.
