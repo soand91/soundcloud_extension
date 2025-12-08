@@ -1,0 +1,8 @@
+# Build artifacts
+dist/
+build/
+
+.vscode/
+config.local.js
+config/config.local.js
+web-ext-artifacts/

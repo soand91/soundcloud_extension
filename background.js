@@ -3,11 +3,13 @@ let activeSoundCloudTabId = null;
 let tabStates = {};
 let pendingUpdateCache = {};
 let persistTimer = null;
+import { WEBHOOK_URL as LOCAL_WEBHOOK } from './config/config.local.js';
+import { WEBHOOK_URL as SAMPLE_WEBHOOK} from './config/config.sample.js';
 const DEFAULT_SETTINGS = {
     'start-open-toggle': false,
     'active-tab-toggle': false,
     'theme-default-toggle': false,
-    'report-webhook-url': '""'
+    'report-webhook-url': LOCAL_WEBHOOK || SAMPLE_WEBHOOK || ""
 }
 const SETTINGS_KEYS = Object.keys(DEFAULT_SETTINGS);
 let activeTabFollowsFocus = true; // true = follow browser focus, false = popup-selected

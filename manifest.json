@@ -1,9 +1,21 @@
 {
     "manifest_version": 3,
     "name": "Soundcloud UI Extender",
+    "author": "Andrew Song <sccontroller.extension@proton.me>",
     "version": "1.0.0",
     "description": "Adds convenience playback controls for SoundCloud on other websites.",
+    "browser_specific_settings": {
+        "gecko": {
+            "id": "soundcloud-global-controls@extension",
+            "strict_min_version": "142.0",
+            "data_collection_permissions": {
+                "required": ["none"],
+                "optional": []
+            }
+        }
+    },
     "background": {
+        "scripts": ["background.js"],
         "service_worker": "background.js",
         "type": "module"
     },
@@ -34,5 +46,14 @@
     "web_accessible_resources": [{
         "resources": ["controls/controls.html", "controls/controls.css", "content/soundcloud-controls.js", "controls/Inter-SemiBold.woff"],
         "matches": ["https://*/*", "http://*/*"]
-    }]
+    }],
+    "icons": {
+        "16": "icons/icon16.png",
+        "32": "icons/icon32.png",
+        "48": "icons/icon48.png",
+        "64": "icons/icon64.png",
+        "96": "icons/icon96.png",
+        "128": "icons/icon128.png",
+        "256": "icons/icon256.png"
+    }
 }
